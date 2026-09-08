@@ -77,25 +77,30 @@ class PairgateSupplier(DataSupplier):
 
         return response.json()
 
-    def check_transaction(self, reference):
+    def check_transaction(
+    self,
+    reference
+):
 
-        endpoint = (
-            "/test/transaction/status"
-            if settings.PAIRGATE_TEST_MODE
-            else "/transaction/status"
-        )
+    endpoint = (
+        "/test/transaction/status"
+        if settings.PAIRGATE_TEST_MODE
+        else "/transaction/status"
+    )
 
-        url = f"{self.base_url}{endpoint}"
+    url = (
+        f"{self.base_url}{endpoint}"
+    )
 
-        response = requests.get(
-            url,
-            headers=self.headers,
-            params={
-                "reference_code": reference
-            },
-            timeout=20
-        )
+    response = requests.get(
+        url,
+        headers=self.headers,
+        params={
+            "reference_code": reference
+        },
+        timeout=20
+    )
 
-        response.raise_for_status()
+    response.raise_for_status()
 
-        return response.json()
+    return response.json()
