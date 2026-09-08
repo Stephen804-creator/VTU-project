@@ -1,5 +1,8 @@
 from flask import Blueprint, jsonify
 
+from config.settings import settings
+from database.database import get_connection
+
 
 health_bp = Blueprint(
     "health",
@@ -13,14 +16,48 @@ health_bp = Blueprint(
 )
 def health_check():
 
-    return jsonify({
+    database_status = "ok"
 
+    try:
+
+        connection = (
+            get_connection()
+        )
+
+        cursor = connection.cursor()
+
+        cursor.execute(
+            "SELECT 1"
+        )
+
+        cursor.fetchone()
+
+        connection.close()
+
+    except Exception:
+
+        database_status = "error"
+
+
+    overall_status = (
+        "ok"
+        if database_status == "ok"
+        else "degraded"
+    )
+
+
+    return jsonify({
         "status":
-            "ok",
+            overall_status,
 
         "application":
-            "Subscribe Me",
+            settings.APP_NAME,
 
-        "message":
-            "Subscribe Me backend is running."
+        "environment":
+            settings.APP_ENV,
+
+        "dependencies": {
+            "database":
+                database_status
+        }
     })
