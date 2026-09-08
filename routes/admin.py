@@ -7,7 +7,7 @@ from utils.responses import success_response, error_response
 from services.reconciliation_service import (
     ReconciliationService
 )
-
+from utils.csrf import csrf_required
 admin_bp = Blueprint(
     "admin",
     __name__,
@@ -120,6 +120,7 @@ def admin_wallet_transactions():
     methods=["POST"]
 )
 @admin_required
+@csrf_required
 def admin_sync_plans():
 
     networks = [
@@ -189,6 +190,7 @@ reconciliation_service = (
     methods=["POST"]
 )
 @admin_required
+@csrf_required
 def reconcile_order(reference):
 
     try:
