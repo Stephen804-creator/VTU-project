@@ -1,7 +1,22 @@
-from flask import Blueprint, request, session
+from flask import (
+    Blueprint,
+    request,
+    session,
+    url_for
+)
 
-from services.payment_service import PaymentService
-from utils.responses import success_response, error_response
+from services.auth_service import (
+    AuthService
+)
+
+from services.payment_service import (
+    PaymentService
+)
+
+from utils.responses import (
+    success_response,
+    error_response
+)
 
 
 payments_bp = Blueprint(
@@ -17,7 +32,9 @@ payments_bp = Blueprint(
 )
 def create_payment():
 
-    user_id = session.get("user_id")
+    user_id = session.get(
+        "user_id"
+    )
 
     if not user_id:
 
@@ -30,7 +47,9 @@ def create_payment():
         silent=True
     ) or {}
 
-    amount = data.get("amount")
+    amount = data.get(
+        "amount"
+    )
 
     if amount is None:
 
@@ -43,7 +62,10 @@ def create_payment():
 
         amount = float(amount)
 
-    except (TypeError, ValueError):
+    except (
+        TypeError,
+        ValueError
+    ):
 
         return error_response(
             "Invalid amount.",
@@ -57,34 +79,163 @@ def create_payment():
             400
         )
 
-    # Convert Naira to kobo.
+    if amount > 1000000:
+
+        return error_response(
+            "Maximum wallet funding amount is ₦1,000,000.",
+            400
+        )
+
     amount_kobo = int(
         round(amount * 100)
     )
 
+    user = (
+        AuthService
+        .get_user_by_id(
+            user_id
+        )
+    )
+
+    if not user:
+
+        return error_response(
+            "User account not found.",
+            404
+        )
+
     try:
 
-        payment = PaymentService.create_payment(
-            user_id=user_id,
-            amount_kobo=amount_kobo,
-            provider="pending",
-            payment_method="pending"
+        callback_url = url_for(
+            "payments.payment_callback",
+            _external=True
+        )
+
+        result = (
+            PaymentService
+            .initialize_paystack_payment(
+                user_id=user_id,
+                amount_kobo=amount_kobo,
+                email=user["email"],
+                callback_url=callback_url
+            )
         )
 
         return success_response(
-            data={
-                "payment": payment
-            },
+            data=result,
             message=(
-                "Payment request created. "
-                "Payment provider connection "
-                "will be completed next."
+                "Payment initialized successfully."
             )
         )
 
     except Exception as error:
 
         return error_response(
-            f"Could not create payment: {str(error)}",
+            f"Could not initialize payment: {str(error)}",
+            500
+        )
+
+
+@payments_bp.route(
+    "/callback",
+    methods=["GET"]
+)
+def payment_callback():
+
+    reference = request.args.get(
+        "reference"
+    )
+
+    if not reference:
+
+        return error_response(
+            "Payment reference is missing.",
+            400
+        )
+
+    try:
+
+        result = (
+            PaymentService
+            .verify_paystack_payment(
+                reference
+            )
+        )
+
+        provider_response = (
+            result["provider_response"]
+        )
+
+        provider_data = (
+            provider_response.get(
+                "data",
+                {}
+            )
+        )
+
+        status = str(
+            provider_data.get(
+                "status",
+                ""
+            )
+        ).lower()
+
+        provider_reference = (
+            provider_data.get(
+                "reference"
+            )
+        )
+
+        provider_amount = (
+            provider_data.get(
+                "amount"
+            )
+        )
+
+        if status == "success":
+
+            completed = (
+                PaymentService
+                .complete_verified_payment(
+                    reference=reference,
+                    provider_reference=
+                        provider_reference,
+                    provider_amount_kobo=
+                        provider_amount
+                )
+            )
+
+            return success_response(
+                data=completed,
+                message=(
+                    "Payment verified and "
+                    "wallet credited successfully."
+                )
+            )
+
+        return success_response(
+            data={
+                "reference":
+                    reference,
+
+                "status":
+                    status or "unknown"
+            },
+            message=(
+                "Payment has not been confirmed as successful."
+            )
+        )
+
+    except ValueError as error:
+
+        return error_response(
+            str(error),
+            400
+        )
+
+    except Exception:
+
+        return error_response(
+            "Could not verify payment.",
             500
         )
