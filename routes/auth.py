@@ -7,6 +7,7 @@ from utils.csrf import (
     csrf_required
 )
 
+
 auth_bp = Blueprint(
     "auth",
     __name__,
@@ -15,6 +16,7 @@ auth_bp = Blueprint(
 
 
 @auth_bp.route("/register", methods=["POST"])
+@csrf_required
 def register():
 
     data = request.get_json(silent=True) or {}
@@ -80,6 +82,7 @@ def register():
 
 
 @auth_bp.route("/login", methods=["POST"])
+@csrf_required
 def login():
 
     data = request.get_json(silent=True) or {}
@@ -115,6 +118,7 @@ def login():
 
 
 @auth_bp.route("/logout", methods=["POST"])
+@csrf_required
 def logout():
 
     session.clear()
@@ -151,10 +155,8 @@ def current_user():
         }
     )
 
-@auth_bp.route(
-    "/csrf",
-    methods=["GET"]
-)
+
+@auth_bp.route("/csrf", methods=["GET"])
 def csrf_token():
 
     token = get_csrf_token()
@@ -164,24 +166,3 @@ def csrf_token():
             "csrf_token": token
         }
     )
-
-@auth_bp.route(
-    "/register",
-    methods=["POST"]
-)
-@csrf_required
-def register():
-
-@auth_bp.route(
-    "/login",
-    methods=["POST"]
-)
-@csrf_required
-def login():
-
-@auth_bp.route(
-    "/logout",
-    methods=["POST"]
-)
-@csrf_required
-def logout():    
