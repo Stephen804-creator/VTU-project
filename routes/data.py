@@ -1,6 +1,7 @@
 from flask import Blueprint, request
 
 from services.plan_service import PlanService
+from utils.auth import admin_required
 from utils.responses import success_response, error_response
 from utils.validation import (
     normalize_network,
@@ -18,7 +19,10 @@ data_bp = Blueprint(
 plan_service = PlanService()
 
 
-@data_bp.route("/plans", methods=["GET"])
+@data_bp.route(
+    "/plans",
+    methods=["GET"]
+)
 def plans():
 
     network = request.args.get(
@@ -30,20 +34,26 @@ def plans():
     )
 
     if network:
-        network = normalize_network(network)
+
+        network = normalize_network(
+            network
+        )
 
         if not network:
+
             return error_response(
                 "Unsupported network.",
                 400
             )
 
     if plan_type:
+
         plan_type = normalize_plan_type(
             plan_type
         )
 
         if not plan_type:
+
             return error_response(
                 "Unsupported plan type.",
                 400
@@ -59,30 +69,52 @@ def plans():
     for plan in plans:
 
         formatted_plans.append({
-            "id": plan["id"],
-            "supplier": plan["supplier"],
+            "id":
+                plan["id"],
+
+            "supplier":
+                plan["supplier"],
+
             "supplier_plan_id":
                 plan["supplier_plan_id"],
-            "network": plan["network"],
-            "plan_type": plan["plan_type"],
-            "name": plan["name"],
-            "data_amount": plan["data_amount"],
-            "validity": plan["validity"],
+
+            "network":
+                plan["network"],
+
+            "plan_type":
+                plan["plan_type"],
+
+            "name":
+                plan["name"],
+
+            "data_amount":
+                plan["data_amount"],
+
+            "validity":
+                plan["validity"],
+
             "price_kobo":
                 plan["selling_price_kobo"],
+
             "price_naira":
                 plan["selling_price_kobo"] / 100
         })
 
     return success_response(
         data={
-            "plans": formatted_plans,
-            "count": len(formatted_plans)
+            "plans":
+                formatted_plans,
+            "count":
+                len(formatted_plans)
         }
     )
 
 
-@data_bp.route("/sync", methods=["POST"])
+@data_bp.route(
+    "/sync",
+    methods=["POST"]
+)
+@admin_required
 def sync_plans():
 
     plans = []
@@ -110,12 +142,17 @@ def sync_plans():
 
             try:
 
-                synced = plan_service.sync_pairgate_plans(
-                    network,
-                    plan_type
+                synced = (
+                    plan_service
+                    .sync_pairgate_plans(
+                        network,
+                        plan_type
+                    )
                 )
 
-                plans.extend(synced)
+                plans.extend(
+                    synced
+                )
 
             except Exception as error:
 
@@ -127,8 +164,12 @@ def sync_plans():
 
     return success_response(
         data={
-            "synced_count": len(plans),
-            "errors": errors
+            "synced_count":
+                len(plans),
+            "errors":
+                errors
         },
-        message="Plan synchronization completed."
+        message=(
+            "Plan synchronization completed."
+        )
     )
