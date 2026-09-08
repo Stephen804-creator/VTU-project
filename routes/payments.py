@@ -18,6 +18,7 @@ from utils.responses import (
     error_response
 )
 
+from utils.csrf import csrf_required
 
 payments_bp = Blueprint(
     "payments",
@@ -239,3 +240,10 @@ def payment_callback():
             "Could not verify payment.",
             500
         )
+
+@payments_bp.route(
+    "/create",
+    methods=["POST"]
+)
+@csrf_required
+def create_payment():
