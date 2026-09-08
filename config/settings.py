@@ -52,6 +52,21 @@ class Settings:
         == "true"
     )
 
+    PAYSTACK_SECRET_KEY = os.getenv(
+        "PAYSTACK_SECRET_KEY"
+    )
+
+    PAYSTACK_BASE_URL = os.getenv(
+        "PAYSTACK_BASE_URL",
+        "https://api.paystack.co"
+    )
+
+    PAYSTACK_TEST_MODE = (
+        os.getenv(
+            "PAYSTACK_TEST_MODE",
+            "true"
+        ).lower() == "true"
+    )
     PORT = int(
         os.getenv(
             "PORT",
