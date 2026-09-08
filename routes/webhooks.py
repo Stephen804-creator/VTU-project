@@ -374,3 +374,149 @@ def payment_webhook():
         "Unsupported payment status.",
         400
     )
+    
+payment_provider_service = (
+    PaymentProviderService()
+)
+
+@webhooks_bp.route(
+    "/paystack",
+    methods=["POST"]
+)
+def paystack_webhook():
+
+    raw_payload = request.get_data()
+
+    signature = request.headers.get(
+        "x-paystack-signature"
+    )
+
+    try:
+
+        provider = (
+            payment_provider_service
+            .get_provider("paystack")
+        )
+
+    except Exception:
+
+        return error_response(
+            "Payment provider is not configured.",
+            500
+        )
+
+    if not provider.verify_webhook_signature(
+        raw_payload,
+        signature
+    ):
+
+        return error_response(
+            "Invalid Paystack webhook signature.",
+            401
+        )
+
+    data = request.get_json(
+        silent=True
+    )
+
+    if not isinstance(
+        data,
+        dict
+    ):
+
+        return error_response(
+            "Invalid webhook payload.",
+            400
+        )
+
+    event = str(
+        data.get(
+            "event",
+            ""
+        )
+    ).strip().lower()
+
+    if event != "charge.success":
+
+        return success_response(
+            message=(
+                "Webhook received but no wallet "
+                "funding action was required."
+            )
+        )
+
+    transaction = data.get(
+        "data"
+    )
+
+    if not isinstance(
+        transaction,
+        dict
+    ):
+
+        return error_response(
+            "Invalid transaction payload.",
+            400
+        )
+
+    reference = transaction.get(
+        "reference"
+    )
+
+    amount = transaction.get(
+        "amount"
+    )
+
+    if not reference:
+
+        return error_response(
+            "Payment reference is missing.",
+            400
+        )
+
+    if amount is None:
+
+        return error_response(
+            "Payment amount is missing.",
+            400
+        )
+
+    try:
+
+        result = (
+            PaymentService
+            .complete_verified_payment(
+                reference=reference,
+                provider_reference=
+                    str(
+                        transaction.get(
+                            "id"
+                        )
+                    )
+                    if transaction.get("id")
+                    else None,
+                provider_amount_kobo=
+                    int(amount)
+            )
+        )
+
+        return success_response(
+            data=result,
+            message=(
+                "Paystack payment webhook processed."
+            )
+        )
+
+    except ValueError as error:
+
+        return error_response(
+            str(error),
+            400
+        )
+
+    except Exception:
+
+        return error_response(
+            "Could not process Paystack webhook.",
+            500
+        )
