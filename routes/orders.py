@@ -2,7 +2,7 @@ from flask import Blueprint, request, session
 
 from services.order_service import OrderService
 from utils.responses import success_response, error_response
-
+from utils.csrf import csrf_required
 
 orders_bp = Blueprint(
     "orders",
@@ -168,3 +168,10 @@ def list_orders():
             "orders": orders
         }
     )
+
+@orders_bp.route(
+    "",
+    methods=["POST"]
+)
+@csrf_required
+def create_order():
