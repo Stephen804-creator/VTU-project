@@ -1,39 +1,93 @@
 const API_BASE = "/api/v1";
+let csrfToken = null;
 
+async function loadCsrfToken() {
+
+    const response = await fetch(
+        `${API_BASE}/auth/csrf`,
+        {
+            method: "GET",
+            credentials: "same-origin"
+        }
+    );
+
+    const result = await response.json();
+
+    if (
+        !response.ok ||
+        result.status !== "success"
+    ) {
+
+        throw new Error(
+            result.message ||
+            "Could not obtain CSRF token."
+        );
+    }
+
+    csrfToken =
+        result.data.csrf_token;
+
+    return csrfToken;
+}
 
 async function apiRequest(
     endpoint,
     options = {}
 ) {
 
+    const method = (
+        options.method ||
+        "GET"
+    ).toUpperCase();
+
     const config = {
         ...options,
+
+        credentials:
+            "same-origin",
+
         headers: {
-            "Content-Type": "application/json",
             ...(options.headers || {})
         }
     };
 
+    if (
+        method !== "GET" &&
+        method !== "HEAD" &&
+        method !== "OPTIONS"
+    ) {
+
+        if (!csrfToken) {
+
+            await loadCsrfToken();
+        }
+
+        config.headers[
+            "X-CSRF-Token"
+        ] = csrfToken;
+    }
+
+    if (
+        config.body &&
+        typeof config.body !== "string"
+    ) {
+
+        config.headers[
+            "Content-Type"
+        ] = "application/json";
+
+        config.body = JSON.stringify(
+            config.body
+        );
+    }
 
     const response = await fetch(
         `${API_BASE}${endpoint}`,
         config
     );
 
-
-    let result;
-
-    try {
-
-        result = await response.json();
-
-    } catch (error) {
-
-        throw new Error(
-            "Server returned an invalid response."
-        );
-    }
-
+    const result =
+        await response.json();
 
     if (!response.ok) {
 
@@ -43,10 +97,8 @@ async function apiRequest(
         );
     }
 
-
     return result;
 }
-
 
 function showMessage(
     elementId,
