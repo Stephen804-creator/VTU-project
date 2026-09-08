@@ -12,7 +12,9 @@ from routes.payments import payments_bp
 from routes.transactions import transactions_bp
 from routes.webhooks import webhooks_bp
 from routes.admin import admin_bp
-
+from utils.security import (
+    apply_security_headers
+)
 app = Flask(
     __name__,
     template_folder="templates",
@@ -88,6 +90,10 @@ app.register_blueprint(
 
 app.register_blueprint(
     admin_bp
+)
+
+app.after_request(
+    apply_security_headers
 )
 # ==========================================
 # FRONTEND
