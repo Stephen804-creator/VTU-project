@@ -11,7 +11,7 @@ from routes.orders import orders_bp
 from routes.payments import payments_bp
 from routes.transactions import transactions_bp
 from routes.webhooks import webhooks_bp
-
+from routes.admin import admin_bp
 
 app = Flask(
     __name__,
@@ -86,7 +86,9 @@ app.register_blueprint(
     webhooks_bp
 )
 
-
+app.register_blueprint(
+    admin_bp
+)
 # ==========================================
 # FRONTEND
 # ==========================================
