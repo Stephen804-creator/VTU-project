@@ -8,6 +8,8 @@ from routes.auth import auth_bp
 from routes.wallet import wallet_bp
 from routes.data import data_bp
 from routes.orders import orders_bp
+from routes.payments import payments_bp
+from routes.webhooks import webhooks_bp
 
 
 app = Flask(
@@ -33,6 +35,8 @@ app.register_blueprint(auth_bp)
 app.register_blueprint(wallet_bp)
 app.register_blueprint(data_bp)
 app.register_blueprint(orders_bp)
+app.register_blueprint(payments_bp)
+app.register_blueprint(webhooks_bp)
 
 
 @app.route("/")
