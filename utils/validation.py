@@ -23,12 +23,9 @@ SUPPORTED_PLAN_TYPES = {
 def validate_phone(phone):
 
     if not phone:
-
         return False
 
-
     phone = str(phone).strip()
-
 
     return bool(
         re.fullmatch(
@@ -41,17 +38,11 @@ def validate_phone(phone):
 def normalize_network(network):
 
     if not network:
-
         return None
 
-    network = (
-        str(network)
-        .strip()
-        .lower()
-    )
+    network = str(network).strip().lower()
 
     if network not in SUPPORTED_NETWORKS:
-
         return None
 
     return network
@@ -60,17 +51,11 @@ def normalize_network(network):
 def normalize_plan_type(plan_type):
 
     if not plan_type:
-
         return None
 
-    plan_type = (
-        str(plan_type)
-        .strip()
-        .upper()
-    )
+    plan_type = str(plan_type).strip().upper()
 
     if plan_type not in SUPPORTED_PLAN_TYPES:
-
         return None
 
     return plan_type
