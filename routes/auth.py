@@ -2,7 +2,10 @@ from flask import Blueprint, request, session
 
 from services.auth_service import AuthService
 from utils.responses import success_response, error_response
-
+from utils.csrf import (
+    get_csrf_token,
+    csrf_required
+)
 
 auth_bp = Blueprint(
     "auth",
@@ -147,3 +150,38 @@ def current_user():
             "user": user
         }
     )
+
+@auth_bp.route(
+    "/csrf",
+    methods=["GET"]
+)
+def csrf_token():
+
+    token = get_csrf_token()
+
+    return success_response(
+        data={
+            "csrf_token": token
+        }
+    )
+
+@auth_bp.route(
+    "/register",
+    methods=["POST"]
+)
+@csrf_required
+def register():
+
+@auth_bp.route(
+    "/login",
+    methods=["POST"]
+)
+@csrf_required
+def login():
+
+@auth_bp.route(
+    "/logout",
+    methods=["POST"]
+)
+@csrf_required
+def logout():    
