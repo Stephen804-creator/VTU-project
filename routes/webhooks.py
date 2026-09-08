@@ -26,6 +26,29 @@ order_service = OrderService()
 
 def verify_pairgate_signature():
 
+    # Production must always verify signatures.
+    if settings.APP_ENV == "production":
+
+        verify_signature = True
+
+    else:
+
+        verify_signature = (
+            settings.PAIRGATE_WEBHOOK_VERIFY
+        )
+
+    if not verify_signature:
+
+        return True
+
+    secret = (
+        settings.PAIRGATE_WEBHOOK_SECRET
+    )
+
+    if not secret:
+
+        return False
+
     # ------------------------------------------------------
     # Development override
     # ------------------------------------------------------
