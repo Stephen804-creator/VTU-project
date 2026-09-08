@@ -1,7 +1,14 @@
-from flask import Flask, render_template
+from flask import (
+    Flask,
+    render_template,
+    jsonify
+)
 
 from config.settings import settings
-from database.models import initialize_database
+
+from database.models import (
+    initialize_database
+)
 
 from routes.health import health_bp
 from routes.auth import auth_bp
@@ -10,11 +17,18 @@ from routes.data import data_bp
 from routes.orders import orders_bp
 from routes.payments import payments_bp
 from routes.transactions import transactions_bp
-from routes.webhooks import webhooks_bp
 from routes.admin import admin_bp
+from routes.webhooks import webhooks_bp
+
 from utils.security import (
     apply_security_headers
 )
+
+from utils.logging_config import (
+    configure_logging
+)
+
+
 app = Flask(
     __name__,
     template_folder="templates",
@@ -22,12 +36,9 @@ app = Flask(
 )
 
 
-app.config["SECRET_KEY"] = settings.SECRET_KEY
-
-
-# ==========================================
-# SESSION SECURITY
-# ==========================================
+app.config["SECRET_KEY"] = (
+    settings.SECRET_KEY
+)
 
 app.config[
     "SESSION_COOKIE_HTTPONLY"
@@ -37,6 +48,10 @@ app.config[
     "SESSION_COOKIE_SAMESITE"
 ] = "Lax"
 
+app.config[
+    "MAX_CONTENT_LENGTH"
+] = 1 * 1024 * 1024
+
 
 if settings.APP_ENV == "production":
 
@@ -45,16 +60,16 @@ if settings.APP_ENV == "production":
     ] = True
 
 
-# ==========================================
-# DATABASE
-# ==========================================
+logger = configure_logging()
+
+
+app.after_request(
+    apply_security_headers
+)
+
 
 initialize_database()
 
-
-# ==========================================
-# API ROUTES
-# ==========================================
 
 app.register_blueprint(
     health_bp
@@ -85,19 +100,13 @@ app.register_blueprint(
 )
 
 app.register_blueprint(
-    webhooks_bp
-)
-
-app.register_blueprint(
     admin_bp
 )
 
-app.after_request(
-    apply_security_headers
+app.register_blueprint(
+    webhooks_bp
 )
-# ==========================================
-# FRONTEND
-# ==========================================
+
 
 @app.route("/")
 def home():
@@ -107,9 +116,36 @@ def home():
     )
 
 
-# ==========================================
-# APPLICATION START
-# ==========================================
+@app.errorhandler(413)
+def request_too_large(error):
+
+    return jsonify({
+        "status": "error",
+        "message": "Request is too large."
+    }), 413
+
+
+@app.errorhandler(404)
+def not_found(error):
+
+    return jsonify({
+        "status": "error",
+        "message": "Resource not found."
+    }), 404
+
+
+@app.errorhandler(500)
+def internal_server_error(error):
+
+    logger.exception(
+        "Unhandled application error."
+    )
+
+    return jsonify({
+        "status": "error",
+        "message": "Internal server error."
+    }), 500
+
 
 if __name__ == "__main__":
 
