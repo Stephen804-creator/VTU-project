@@ -1,0 +1,622 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+
+    <meta charset="UTF-8">
+
+    <meta
+        name="viewport"
+        content="width=device-width, initial-scale=1.0"
+    >
+
+    <title>Subscribe Me</title>
+
+    <link
+        rel="stylesheet"
+        href="{{ url_for('static', filename='css/style.css') }}"
+    >
+
+</head>
+
+<body>
+
+    <header class="topbar">
+
+        <div class="brand">
+            Subscribe Me
+        </div>
+
+        <div
+            id="user-area"
+            class="user-area hidden"
+        >
+
+            <span id="user-name"></span>
+
+            <button
+                id="logout-button"
+                class="button button-outline"
+            >
+                Logout
+            </button>
+
+        </div>
+
+    </header>
+
+
+    <main class="container">
+
+        <!-- ==========================================
+             AUTH SECTION
+        =========================================== -->
+
+        <section
+            id="auth-section"
+            class="auth-section"
+        >
+
+            <div class="auth-card">
+
+                <div class="auth-header">
+
+                    <h1>Subscribe Me</h1>
+
+                    <p>
+                        Buy affordable data directly from
+                        your Subscribe Me wallet.
+                    </p>
+
+                </div>
+
+
+                <div
+                    id="auth-message"
+                    class="message hidden"
+                ></div>
+
+
+                <!-- LOGIN -->
+
+                <form
+                    id="login-form"
+                    class="auth-form"
+                >
+
+                    <h2>Login</h2>
+
+                    <label for="login-email">
+                        Email
+                    </label>
+
+                    <input
+                        type="email"
+                        id="login-email"
+                        required
+                        autocomplete="email"
+                    >
+
+
+                    <label for="login-password">
+                        Password
+                    </label>
+
+                    <input
+                        type="password"
+                        id="login-password"
+                        required
+                        autocomplete="current-password"
+                    >
+
+
+                    <button
+                        type="submit"
+                        class="button button-primary"
+                    >
+                        Login
+                    </button>
+
+                </form>
+
+
+                <div class="auth-divider">
+                    OR
+                </div>
+
+
+                <!-- REGISTER -->
+
+                <form
+                    id="register-form"
+                    class="auth-form"
+                >
+
+                    <h2>Create Account</h2>
+
+
+                    <label for="register-first-name">
+                        First name
+                    </label>
+
+                    <input
+                        type="text"
+                        id="register-first-name"
+                    >
+
+
+                    <label for="register-last-name">
+                        Last name
+                    </label>
+
+                    <input
+                        type="text"
+                        id="register-last-name"
+                    >
+
+
+                    <label for="register-email">
+                        Email
+                    </label>
+
+                    <input
+                        type="email"
+                        id="register-email"
+                        required
+                        autocomplete="email"
+                    >
+
+
+                    <label for="register-phone">
+                        Phone number
+                    </label>
+
+                    <input
+                        type="tel"
+                        id="register-phone"
+                        placeholder="08012345678"
+                    >
+
+
+                    <label for="register-password">
+                        Password
+                    </label>
+
+                    <input
+                        type="password"
+                        id="register-password"
+                        required
+                        minlength="8"
+                        autocomplete="new-password"
+                    >
+
+
+                    <button
+                        type="submit"
+                        class="button button-primary"
+                    >
+                        Create Account
+                    </button>
+
+                </form>
+
+            </div>
+
+        </section>
+
+
+        <!-- ==========================================
+             DASHBOARD
+        =========================================== -->
+
+        <section
+            id="dashboard-section"
+            class="hidden"
+        >
+
+            <div class="dashboard-header">
+
+                <div>
+
+                    <h1>Dashboard</h1>
+
+                    <p>
+                        Manage your wallet and buy data.
+                    </p>
+
+                </div>
+
+            </div>
+
+
+            <!-- WALLET -->
+
+            <div class="dashboard-grid">
+
+                <div class="card wallet-card">
+
+                    <span class="card-label">
+                        Wallet Balance
+                    </span>
+
+                    <div
+                        id="wallet-balance"
+                        class="wallet-balance"
+                    >
+                        ₦0.00
+                    </div>
+
+                    <button
+                        id="fund-wallet-button"
+                        class="button button-primary"
+                    >
+                        Fund Wallet
+                    </button>
+
+                </div>
+
+
+                <div class="card">
+
+                    <span class="card-label">
+                        Account
+                    </span>
+
+                    <h3 id="account-email">
+                        -
+                    </h3>
+
+                    <p id="account-phone">
+                        -
+                    </p>
+
+                </div>
+
+            </div>
+
+
+            <!-- ======================================
+                 BUY DATA
+            ======================================= -->
+
+            <div class="card purchase-card">
+
+                <div class="section-heading">
+
+                    <div>
+
+                        <h2>Buy Data</h2>
+
+                        <p>
+                            Select your network and data plan.
+                        </p>
+
+                    </div>
+
+                </div>
+
+
+                <div
+                    id="data-message"
+                    class="message hidden"
+                ></div>
+
+
+                <div class="form-grid">
+
+                    <div>
+
+                        <label for="network-select">
+                            Network
+                        </label>
+
+                        <select id="network-select">
+
+                            <option value="">
+                                Select network
+                            </option>
+
+                            <option value="mtn">
+                                MTN
+                            </option>
+
+                            <option value="airtel">
+                                Airtel
+                            </option>
+
+                            <option value="glo">
+                                Glo
+                            </option>
+
+                            <option value="9mobile">
+                                9mobile
+                            </option>
+
+                        </select>
+
+                    </div>
+
+
+                    <div>
+
+                        <label for="plan-type-select">
+                            Plan Type
+                        </label>
+
+                        <select id="plan-type-select">
+
+                            <option value="">
+                                Select plan type
+                            </option>
+
+                            <option value="CG">
+                                CG
+                            </option>
+
+                            <option value="CG_LITE">
+                                CG Lite
+                            </option>
+
+                            <option value="SME">
+                                SME
+                            </option>
+
+                            <option value="GIFTING">
+                                Gifting
+                            </option>
+
+                            <option value="AWOOF">
+                                Awoof
+                            </option>
+
+                        </select>
+
+                    </div>
+
+                </div>
+
+
+                <button
+                    id="load-plans-button"
+                    class="button button-primary"
+                >
+                    Load Plans
+                </button>
+
+
+                <div
+                    id="plans-loading"
+                    class="loading hidden"
+                >
+                    Loading plans...
+                </div>
+
+
+                <div
+                    id="plans-container"
+                    class="plans-container"
+                ></div>
+
+
+                <!-- PURCHASE FORM -->
+
+                <div
+                    id="purchase-area"
+                    class="purchase-area hidden"
+                >
+
+                    <div class="selected-plan">
+
+                        <span>
+                            Selected Plan
+                        </span>
+
+                        <strong id="selected-plan-name">
+                            -
+                        </strong>
+
+                        <strong id="selected-plan-price">
+                            ₦0.00
+                        </strong>
+
+                    </div>
+
+
+                    <label for="purchase-phone">
+                        Recipient phone number
+                    </label>
+
+                    <input
+                        type="tel"
+                        id="purchase-phone"
+                        placeholder="08012345678"
+                    >
+
+
+                    <button
+                        id="purchase-button"
+                        class="button button-primary"
+                    >
+                        Buy Data
+                    </button>
+
+                </div>
+
+            </div>
+
+
+            <!-- ======================================
+                 TRANSACTIONS
+            ======================================= -->
+
+            <div class="card">
+
+                <div class="section-heading">
+
+                    <div>
+
+                        <h2>Recent Transactions</h2>
+
+                        <p>
+                            Your recent wallet activity and
+                            data purchases.
+                        </p>
+
+                    </div>
+
+                    <button
+                        id="refresh-transactions-button"
+                        class="button button-outline"
+                    >
+                        Refresh
+                    </button>
+
+                </div>
+
+
+                <div
+                    id="transactions-container"
+                    class="transactions-container"
+                ></div>
+
+            </div>
+
+        </section>
+
+    </main>
+
+
+    <!-- ==========================================
+         FUND WALLET MODAL
+    =========================================== -->
+
+    <div
+        id="fund-wallet-modal"
+        class="modal hidden"
+    >
+
+        <div class="modal-content">
+
+            <button
+                id="close-fund-modal"
+                class="modal-close"
+            >
+                ×
+            </button>
+
+            <h2>Fund Wallet</h2>
+
+            <p>
+                Enter the amount you want to add
+                to your Subscribe Me wallet.
+            </p>
+
+
+            <div
+                id="wallet-message"
+                class="message hidden"
+            ></div>
+
+
+            <label for="fund-amount">
+                Amount (₦)
+            </label>
+
+            <input
+                type="number"
+                id="fund-amount"
+                min="100"
+                step="1"
+                placeholder="1000"
+            >
+
+
+            <button
+                id="create-payment-button"
+                class="button button-primary"
+            >
+                Continue
+            </button>
+
+
+            <div
+                id="payment-info"
+                class="payment-info hidden"
+            >
+
+                <p>
+                    Payment reference:
+                </p>
+
+                <strong id="payment-reference"></strong>
+
+                <p>
+                    A real payment provider will be
+                    connected here next.
+                </p>
+
+            </div>
+
+        </div>
+
+    </div>
+
+
+    <!-- ==========================================
+         ORDER CONFIRMATION MODAL
+    =========================================== -->
+
+    <div
+        id="order-modal"
+        class="modal hidden"
+    >
+
+        <div class="modal-content">
+
+            <button
+                id="close-order-modal"
+                class="modal-close"
+            >
+                ×
+            </button>
+
+            <h2>Confirm Purchase</h2>
+
+            <div id="order-summary"></div>
+
+
+            <button
+                id="confirm-order-button"
+                class="button button-primary"
+            >
+                Confirm Purchase
+            </button>
+
+        </div>
+
+    </div>
+
+
+    <script
+        src="{{ url_for('static', filename='js/app.js') }}"
+    ></script>
+
+    <script
+        src="{{ url_for('static', filename='js/auth.js') }}"
+    ></script>
+
+    <script
+        src="{{ url_for('static', filename='js/data.js') }}"
+    ></script>
+
+    <script
+        src="{{ url_for('static', filename='js/wallet.js') }}"
+    ></script>
+
+    <script
+        src="{{ url_for('static', filename='js/transactions.js') }}"
+    ></script>
+
+</body>
+
+    </html>
