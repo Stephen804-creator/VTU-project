@@ -4,7 +4,9 @@ from services.plan_service import PlanService
 from services.transaction_service import TransactionService
 from utils.auth import admin_required
 from utils.responses import success_response, error_response
-
+from services.reconciliation_service import (
+    ReconciliationService
+)
 
 admin_bp = Blueprint(
     "admin",
@@ -177,3 +179,44 @@ def admin_sync_plans():
             "synchronization completed."
         )
     )
+reconciliation_service = (
+    ReconciliationService()
+)
+
+
+@admin_bp.route(
+    "/orders/<reference>/reconcile",
+    methods=["POST"]
+)
+@admin_required
+def reconcile_order(reference):
+
+    try:
+
+        result = (
+            reconciliation_service
+            .check_order(
+                reference
+            )
+        )
+
+        return success_response(
+            data=result,
+            message=(
+                "Order reconciliation completed."
+            )
+        )
+
+    except ValueError as error:
+
+        return error_response(
+            str(error),
+            404
+        )
+
+    except Exception as error:
+
+        return error_response(
+            f"Reconciliation failed: {str(error)}",
+            500
+        )
