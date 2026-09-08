@@ -22,10 +22,6 @@ class OrderService:
         phone
     ):
 
-        # ---------------------------------
-        # 1. Validate phone number
-        # ---------------------------------
-
         phone = str(phone).strip()
 
         if not validate_phone(phone):
@@ -34,10 +30,6 @@ class OrderService:
                 "Invalid Nigerian phone number. "
                 "Use 11 digits beginning with 0."
             )
-
-        # ---------------------------------
-        # 2. Find the selected plan
-        # ---------------------------------
 
         plan = self.plan_service.get_plan_by_id(
             plan_id
@@ -49,10 +41,6 @@ class OrderService:
                 "The selected data plan is no longer available."
             )
 
-        # ---------------------------------
-        # 3. Determine price
-        # ---------------------------------
-
         amount_kobo = int(
             plan["selling_price_kobo"]
         )
@@ -63,17 +51,9 @@ class OrderService:
                 "This data plan has an invalid price."
             )
 
-        # ---------------------------------
-        # 4. Generate our reference
-        # ---------------------------------
-
         reference = generate_reference(
             "ORD"
         )
-
-        # ---------------------------------
-        # 5. Create local order
-        # ---------------------------------
 
         connection = get_connection()
 
@@ -119,10 +99,6 @@ class OrderService:
 
             connection.close()
 
-        # ---------------------------------
-        # 6. Debit customer wallet
-        # ---------------------------------
-
         try:
 
             WalletService.debit_wallet(
@@ -145,19 +121,11 @@ class OrderService:
 
             raise
 
-        # ---------------------------------
-        # 7. Mark order PROCESSING
-        # ---------------------------------
-
         self._update_order(
             reference,
             "PROCESSING",
             "Sending data order to supplier."
         )
-
-        # ---------------------------------
-        # 8. Send to supplier
-        # ---------------------------------
 
         try:
 
@@ -176,10 +144,6 @@ class OrderService:
                 )
             )
 
-            # ---------------------------------
-            # 9. Save supplier response
-            # ---------------------------------
-
             self._save_supplier_log(
                 supplier=plan["supplier"],
                 operation="purchase",
@@ -194,10 +158,6 @@ class OrderService:
                 response_data=supplier_response
             )
 
-            # ---------------------------------
-            # 10. Interpret supplier response
-            # ---------------------------------
-
             supplier_status = str(
                 supplier_response.get(
                     "status",
@@ -205,16 +165,35 @@ class OrderService:
                 )
             ).lower()
 
+            supplier_data = supplier_response.get(
+                "data",
+                {}
+            )
+
+            if not isinstance(
+                supplier_data,
+                dict
+            ):
+                supplier_data = {}
+
             supplier_reference = (
+                supplier_response.get(
+                    "reference_code"
+                )
+                or
                 supplier_response.get(
                     "reference"
                 )
-                or supplier_response.get(
+                or
+                supplier_response.get(
                     "transaction_id"
                 )
-                or supplier_response.get(
-                    "data", {}
-                ).get(
+                or
+                supplier_data.get(
+                    "reference_code"
+                )
+                or
+                supplier_data.get(
                     "reference"
                 )
             )
@@ -230,6 +209,10 @@ class OrderService:
                     status="SUCCESS",
                     message=(
                         supplier_response.get(
+                            "message"
+                        )
+                        or
+                        supplier_data.get(
                             "message"
                         )
                         or
@@ -249,12 +232,13 @@ class OrderService:
                             "message"
                         )
                         or
+                        supplier_data.get(
+                            "message"
+                        )
+                        or
                         "Data purchase successful."
                     )
                 }
-
-            # If supplier says processing/pending,
-            # DON'T refund yet.
 
             if supplier_status in {
                 "pending",
@@ -266,6 +250,10 @@ class OrderService:
                     status="PROCESSING",
                     message=(
                         supplier_response.get(
+                            "message"
+                        )
+                        or
+                        supplier_data.get(
                             "message"
                         )
                         or
@@ -285,16 +273,20 @@ class OrderService:
                             "message"
                         )
                         or
+                        supplier_data.get(
+                            "message"
+                        )
+                        or
                         "Order is being processed."
                     )
                 }
 
-            # ---------------------------------
-            # Supplier explicitly rejected it
-            # ---------------------------------
-
             reason = (
                 supplier_response.get(
+                    "message"
+                )
+                or
+                supplier_data.get(
                     "message"
                 )
                 or
@@ -327,14 +319,6 @@ class OrderService:
             }
 
         except Exception as error:
-
-            # ---------------------------------
-            # IMPORTANT:
-            #
-            # A timeout/network failure does NOT
-            # automatically mean the supplier
-            # rejected the purchase.
-            # ---------------------------------
 
             self._update_order(
                 reference=reference,
@@ -372,6 +356,161 @@ class OrderService:
                 )
             }
 
+    # ==========================================================
+    # PAIRGATE WEBHOOK HANDLER
+    # ==========================================================
+
+    def process_pairgate_webhook(
+        self,
+        reference,
+        status,
+        message=None,
+        supplier_reference=None
+    ):
+
+        status = str(
+            status or ""
+        ).strip().lower()
+
+        if status not in {
+            "successful",
+            "failed"
+        }:
+
+            raise ValueError(
+                "Unsupported Pairgate webhook status."
+            )
+
+        order = self.get_order_by_reference(
+            reference
+        )
+
+        if not order:
+
+            raise ValueError(
+                "Order not found."
+            )
+
+        current_status = str(
+            order["status"]
+        ).upper()
+
+        # ------------------------------------------------------
+        # SUCCESSFUL ORDER
+        # ------------------------------------------------------
+
+        if status == "successful":
+
+            # If this webhook was already processed,
+            # do nothing. This makes the endpoint idempotent.
+            if current_status == "SUCCESS":
+
+                return {
+                    "status": "already_processed",
+                    "reference": reference,
+                    "order_status": "SUCCESS"
+                }
+
+            # A refunded order must not automatically be
+            # changed back to SUCCESS.
+            if current_status == "REFUNDED":
+
+                return {
+                    "status": "ignored",
+                    "reference": reference,
+                    "order_status": current_status,
+                    "message": (
+                        "Order was already refunded."
+                    )
+                }
+
+            self._update_order(
+                reference=reference,
+                status="SUCCESS",
+                message=(
+                    message
+                    or
+                    "Data purchase completed."
+                ),
+                supplier_reference=
+                    supplier_reference
+            )
+
+            return {
+                "status": "success",
+                "reference": reference,
+                "order_status": "SUCCESS"
+            }
+
+        # ------------------------------------------------------
+        # FAILED ORDER
+        # ------------------------------------------------------
+
+        if status == "failed":
+
+            # Duplicate failed webhook.
+            if current_status == "REFUNDED":
+
+                return {
+                    "status": "already_processed",
+                    "reference": reference,
+                    "order_status": "REFUNDED"
+                }
+
+            # Never refund an order that we already marked
+            # successful.
+            if current_status == "SUCCESS":
+
+                return {
+                    "status": "ignored",
+                    "reference": reference,
+                    "order_status": "SUCCESS",
+                    "message": (
+                        "A failed webhook was received "
+                        "after the order was marked successful."
+                    )
+                }
+
+            refund_result = self._refund_customer(
+                user_id=order["user_id"],
+                amount_kobo=order["amount_kobo"],
+                order_reference=reference,
+                plan_name=(
+                    order.get("plan_name")
+                    or
+                    "data purchase"
+                ),
+                reason=(
+                    message
+                    or
+                    "Pairgate marked the transaction as failed."
+                )
+            )
+
+            self._update_order(
+                reference=reference,
+                status="REFUNDED",
+                message=(
+                    message
+                    or
+                    "Pairgate marked the transaction as failed. "
+                    "Wallet refunded."
+                ),
+                supplier_reference=
+                    supplier_reference
+            )
+
+            return {
+                "status": "refunded",
+                "reference": reference,
+                "order_status": "REFUNDED",
+                "refund": refund_result
+            }
+
+    # ==========================================================
+    # REFUND
+    # ==========================================================
+
     def _refund_customer(
         self,
         user_id,
@@ -385,7 +524,6 @@ class OrderService:
             f"REFUND-{order_reference}"
         )
 
-        # Prevent duplicate refund.
         connection = get_connection()
 
         try:
@@ -402,23 +540,40 @@ class OrderService:
 
             existing = cursor.fetchone()
 
-            if existing:
-
-                return
-
         finally:
 
             connection.close()
 
-        WalletService.credit_wallet(
-            user_id=user_id,
-            amount_kobo=amount_kobo,
-            reference=refund_reference,
-            description=(
-                f"Refund for {plan_name}. "
-                f"Reason: {reason}"
+        if existing:
+
+            return {
+                "status": "already_refunded",
+                "reference": refund_reference
+            }
+
+        wallet_transaction = (
+            WalletService.credit_wallet(
+                user_id=user_id,
+                amount_kobo=amount_kobo,
+                reference=refund_reference,
+                description=(
+                    f"Refund for {plan_name}. "
+                    f"Reason: {reason}"
+                )
             )
         )
+
+        return {
+            "status": "refunded",
+            "reference": refund_reference,
+            "amount_kobo": amount_kobo,
+            "wallet_transaction":
+                wallet_transaction
+        }
+
+    # ==========================================================
+    # DATABASE HELPERS
+    # ==========================================================
 
     def _update_order(
         self,
@@ -488,6 +643,42 @@ class OrderService:
             ))
 
             connection.commit()
+
+        finally:
+
+            connection.close()
+
+    def get_order_by_reference(
+        self,
+        reference
+    ):
+
+        connection = get_connection()
+
+        try:
+
+            cursor = connection.cursor()
+
+            cursor.execute("""
+                SELECT
+                    o.*,
+                    d.name AS plan_name,
+                    d.data_amount,
+                    d.validity
+                FROM orders o
+                LEFT JOIN data_plans d
+                    ON o.plan_id = d.id
+                WHERE o.reference = ?
+            """, (
+                reference,
+            ))
+
+            order = cursor.fetchone()
+
+            if not order:
+                return None
+
+            return dict(order)
 
         finally:
 
