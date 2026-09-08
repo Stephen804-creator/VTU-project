@@ -1,7 +1,6 @@
 from flask import Blueprint, session
 
-from services.wallet_service import WalletService
-from services.order_service import OrderService
+from services.transaction_service import TransactionService
 from utils.responses import success_response, error_response
 
 
@@ -12,28 +11,33 @@ transactions_bp = Blueprint(
 )
 
 
-order_service = OrderService()
-
-
-@transactions_bp.route("", methods=["GET"])
+@transactions_bp.route(
+    "",
+    methods=["GET"]
+)
 def transactions():
 
-    user_id = session.get("user_id")
+    user_id = session.get(
+        "user_id"
+    )
 
     if not user_id:
+
         return error_response(
             "You must be logged in.",
             401
         )
 
     wallet_transactions = (
-        WalletService.get_transactions(
+        TransactionService
+        .get_wallet_transactions(
             user_id=user_id
         )
     )
 
     orders = (
-        order_service.get_orders(
+        TransactionService
+        .get_orders(
             user_id=user_id
         )
     )
@@ -42,6 +46,7 @@ def transactions():
         data={
             "wallet_transactions":
                 wallet_transactions,
-            "orders": orders
+            "orders":
+                orders
         }
     )
