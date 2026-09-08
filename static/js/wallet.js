@@ -85,64 +85,60 @@ document
 
 async function createPayment() {
 
-    const amount =
+    const amountInput =
         document.getElementById(
-            "fund-amount"
-        ).value;
+            "fundAmount"
+        );
 
+    const amount = parseFloat(
+        amountInput.value
+    );
 
-    if (!amount) {
+    if (!amount || amount <= 0) {
 
         showMessage(
-            "wallet-message",
-            "Enter an amount.",
+            "Enter a valid funding amount.",
             "error"
         );
 
         return;
     }
 
-
     try {
 
-        const result =
-            await apiRequest(
-                "/payments/create",
-                {
-                    method: "POST",
-                    body: JSON.stringify({
-                        amount
-                    })
-                }
+        const result = await apiRequest(
+            "/payments/create",
+            {
+                method: "POST",
+
+                body: JSON.stringify({
+                    amount: amount
+                })
+            }
+        );
+
+        const authorizationUrl =
+            result.data
+                .authorization_url;
+
+        if (!authorizationUrl) {
+
+            throw new Error(
+                "Payment checkout URL was not returned."
             );
+        }
 
+        closeFundWalletModal();
 
-        const payment =
-            result.data.payment;
-
-
-        showMessage(
-            "wallet-message",
-            result.message,
-            "info"
-        );
-
-
-        document.getElementById(
-            "payment-reference"
-        ).textContent =
-            payment.reference;
-
-
-        showElement(
-            "payment-info"
-        );
-
+        /*
+         * Send the customer to Paystack Checkout.
+         */
+        window.location.href =
+            authorizationUrl;
 
     } catch (error) {
 
         showMessage(
-            "wallet-message",
             error.message,
             "error"
         );
