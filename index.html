@@ -3,318 +3,180 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dynamic VTU Portal Dashboard</title>
+    <title>Wholesale Data Dispenser</title>
     <style>
         :root {
-            --primary-color: #e50914;
-            --secondary-color: #00875a;
-            --background-color: #f4f5f7;
-            --card-background: #ffffff;
-            --text-main: #172b4d;
-            --text-muted: #5e6c84;
-            --border-color: #dfe1e6;
-            --border-radius: 8px;
-            --transition: all 0.2s ease-in-out;
+            --primary: #0f172a;
+            --accent: #e11d48;
+            --bg: #f8fafc;
+            --card: #ffffff;
+            --text: #1e293b;
         }
-
-        * {
-            box-sizing: border-box;
-            margin: 0;
-            padding: 0;
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-        }
-
         body {
-            background-color: var(--background-color);
-            color: var(--text-main);
+            font-family: system-ui, -apple-system, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            margin: 0;
             padding: 20px;
             display: flex;
             justify-content: center;
-            align-items: center;
-            min-height: 100vh;
         }
-
-        .dashboard-container {
+        .container {
             width: 100%;
-            max-width: 480px;
-            background: var(--card-background);
-            border-radius: var(--border-radius);
-            box-shadow: 0 4px 12px rgba(9, 30, 66, 0.15);
-            padding: 24px;
+            max-width: 440px;
+            background: var(--card);
+            padding: 25px;
+            border-radius: 16px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.04);
         }
-
-        .header {
-            margin-bottom: 24px;
-            text-align: center;
-        }
-
-        .header h1 {
-            font-size: 24px;
-            color: var(--text-main);
-            font-weight: 700;
-        }
-
-        .header p {
-            font-size: 14px;
-            color: var(--text-muted);
-            margin-top: 4px;
-        }
-
-        .form-group {
-            margin-bottom: 20px;
-        }
-
-        .form-group label {
-            display: block;
-            font-size: 14px;
-            font-weight: 600;
-            margin-bottom: 8px;
-            color: var(--text-main);
-        }
-
-        .form-control {
+        h2 { margin: 0 0 10px 0; color: var(--primary); text-align: center; }
+        .sub { font-size: 14px; color: #64748b; text-align: center; margin-bottom: 25px; }
+        .form-group { margin-bottom: 20px; }
+        label { display: block; font-weight: 600; margin-bottom: 8px; font-size: 14px; }
+        select, input {
             width: 100%;
             padding: 12px;
+            border: 2px solid #e2e8f0;
+            border-radius: 8px;
             font-size: 15px;
-            border: 1px solid var(--border-color);
-            border-radius: var(--border-radius);
-            background-color: #fafbfc;
-            color: var(--text-main);
+            box-sizing: border-box;
             outline: none;
-            transition: var(--transition);
         }
-
-        .form-control:focus {
-            border-color: var(--primary-color);
-            background-color: #fff;
-            box-shadow: 0 0 0 2px rgba(229, 9, 20, 0.1);
-        }
-
-        .btn-submit {
+        select:focus, input:focus { border-color: var(--accent); }
+        button {
             width: 100%;
             padding: 14px;
-            background-color: var(--primary-color);
-            color: #ffffff;
+            background: var(--primary);
+            color: white;
             border: none;
-            border-radius: var(--border-radius);
+            border-radius: 8px;
             font-size: 16px;
             font-weight: 600;
             cursor: pointer;
-            transition: var(--transition);
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            gap: 8px;
         }
-
-        .btn-submit:hover {
-            background-color: #b80710;
-        }
-
-        .btn-submit:disabled {
-            background-color: var(--border-color);
-            color: var(--text-muted);
-            cursor: not-allowed;
-        }
-
-        .alert-box {
+        button:disabled { background: #94a3b8; cursor: not-allowed; }
+        #status-box {
             margin-top: 20px;
-            padding: 12px 16px;
-            border-radius: var(--border-radius);
-            font-size: 14px;
+            padding: 12px;
+            border-radius: 8px;
             display: none;
-            line-height: 1.5;
-        }
-
-        .alert-success {
-            background-color: #deebff;
-            color: #0747a6;
-            border: 1px solid #b3d4ff;
-            display: block;
-        }
-
-        .alert-danger {
-            background-color: #ffebe6;
-            color: #bf2600;
-            border: 1px solid #ffbdad;
-            display: block;
-        }
-
-        .spinner {
-            width: 18px;
-            height: 18px;
-            border: 2px solid rgba(255, 255, 255, 0.3);
-            border-radius: 50%;
-            border-top-color: white;
-            animation: spin 0.8s linear infinite;
-            display: none;
-        }
-
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-
-        .info-footer {
-            margin-top: 24px;
-            padding-top: 16px;
-            border-top: 1px solid var(--border-color);
-            font-size: 12px;
-            color: var(--text-muted);
             text-align: center;
+            font-weight: 500;
         }
+        .success { background: #dcfce7; color: #166534; border: 1px solid #bbf7d0; }
+        .error { background: #fee2e2; color: #991b1b; border: 1px solid #fecaca; }
     </style>
 </head>
 <body>
 
-    <div class="dashboard-container">
-        <div class="header">
-            <h1>Automated Data Portal</h1>
-            <p>Select your criteria to instantly route data bundles</p>
+<div class="container">
+    <h2>Data Dispenser Portal</h2>
+    <p class="sub">Deploy cheap wholesale bundles seamlessly using your Pairgate API.</p>
+    
+    <form id="vendingForm">
+        <div class="form-group">
+            <label for="network">1. Choose Network Provider</label>
+            <select id="network" required>
+                <option value="" disabled selected>Select network...</option>
+                <option value="AIRTEL">Airtel Corporate Gifting</option>
+                <option value="MTN">MTN SME Bundles</option>
+            </select>
         </div>
 
-        <form id="vtuOrderForm">
-            <div class="form-group">
-                <label for="network_id">Mobile Network</label>
-                <select id="network_id" class="form-control" required>
-                    <option value="" disabled selected>Select network...</option>
-                </select>
-            </div>
-
-            <div class="form-group">
-                <label for="plan_id">Available Package</label>
-                <select id="plan_id" class="form-control" required disabled>
-                    <option value="" disabled selected>Choose a network first...</option>
-                </select>
-            </div>
-
-            <div class="form-group">
-                <label for="phone_number">Recipient Mobile Number</label>
-                <input type="tel" id="phone_number" class="form-control" placeholder="e.g., 08012345678" pattern="^0[789]\d{9}$" required>
-            </div>
-
-            <button type="submit" id="submitBtn" class="btn-submit">
-                <span class="spinner" id="btnSpinner"></span>
-                <span id="btnText">Dispense Data Bundle</span>
-            </button>
-        </form>
-
-        <div id="statusAlert" class="alert-box"></div>
-
-        <div class="info-footer">
-            To verify data delivery manually on the device, dial the balance string inquiry code.
+        <div class="form-group">
+            <label for="plan_id">2. Choose Data Package Size</label>
+            <select id="plan_id" required disabled>
+                <option value="" disabled selected>Select a network first...</option>
+            </select>
         </div>
-    </div>
 
-    <script>
-        document.addEventListener('DOMContentLoaded', () => {
-            const networkSelect = document.getElementById('network_id');
-            const planSelect = document.getElementById('plan_id');
-            const form = document.getElementById('vtuOrderForm');
-            const submitBtn = document.getElementById('submitBtn');
-            const btnSpinner = document.getElementById('btnSpinner');
-            const btnText = document.getElementById('btnText');
-            const statusAlert = document.getElementById('statusAlert');
+        <div class="form-group">
+            <label for="phone">3. Target Destination Number</label>
+            <input type="tel" id="phone" placeholder="e.g., 08123456789" required pattern="^0\d{10}$">
+        </div>
 
-            // 1. DYNAMIC COMPONENT: FETCH ACTIVE PROVIDER PACKAGES ON LOAD
-            async function fetchLiveMarketPlans() {
-                try {
-                    const response = await fetch('/v1/get-live-plans');
-                    if (!response.ok) throw new Error('API routing failure');
-                    
-                    const result = await response.json();
-                    if (result.status === 'success') {
-                        populateNetworkDropdown(result.networks);
-                    }
-                } catch (error) {
-                    console.error('Failed to communicate with local Flask engine:', error);
-                    // Fallback to basic structure if backend framework is initializing
-                    populateNetworkDropdown({
-                        "AIRTEL": [{"id": "airtel_cg_1gb", "name": "Airtel Corporate Gifting 1GB (30 Days)"}],
-                        "MTN": [{"id": "mtn_sme_1gb", "name": "MTN SME Wholesale 1GB (30 Days)"}]
-                    });
-                }
+        <button type="submit" id="submitBtn">Deploy Data Bundle</button>
+    </form>
+
+    <div id="status-box"></div>
+</div>
+
+<script>
+    let globalPlans = {};
+
+    // Background fetch: Pull active plans automatically from your server on load
+    async function loadLivePlans() {
+        try {
+            const res = await fetch('/v1/get-live-plans');
+            const data = await res.json();
+            if (data.status === "success") {
+                globalPlans = data.networks;
             }
+        } catch (err) {
+            console.error("Could not sync live database plans:", err);
+        }
+    }
 
-            let loadedNetworkData = {};
+    // Filter package options instantly when user selects a network
+    document.getElementById('network').addEventListener('change', function() {
+        const selectedNetwork = this.value;
+        const planDropdown = document.getElementById('plan_id');
+        
+        planDropdown.innerHTML = '<option value="" disabled selected>Choose package...</option>';
+        planDropdown.disabled = false;
 
-            function populateNetworkDropdown(networks) {
-                loadedNetworkData = networks;
-                networkSelect.innerHTML = '<option value="" disabled selected>Select network...</option>';
-                
-                Object.keys(networks).forEach(networkName => {
-                    const option = document.createElement('option');
-                    option.value = networkName;
-                    option.textContent = networkName;
-                    networkSelect.appendChild(option);
-                });
-            }
-
-            // 2. LISTEN FOR NETWORK SELECTION TO RENDER BUNDLES
-            networkSelect.addEventListener('change', (e) => {
-                const selectedNetwork = e.target.value;
-                planSelect.innerHTML = '<option value="" disabled selected>Choose package...</option>';
-                planSelect.disabled = false;
-
-                if (loadedNetworkData[selectedNetwork]) {
-                    loadedNetworkData[selectedNetwork].forEach(plan => {
-                        const option = document.createElement('option');
-                        option.value = plan.id;
-                        option.textContent = plan.name;
-                        planSelect.appendChild(option);
-                    });
-                }
-            });
-
-            // 3. ASYNCHRONOUS TRANSACTION PIPELINE
-            form.addEventListener('submit', async (e) => {
-                e.preventDefault();
-                
-                // Reset alert status
-                statusAlert.style.display = 'none';
-                statusAlert.className = 'alert-box';
-                
-                // Trigger button sending state animations
-                submitBtn.disabled = true;
-                btnSpinner.style.display = 'block';
-                btnText.textContent = 'Processing Route...';
-
-                const orderData = {
-                    network: networkSelect.value,
-                    plan_id: planSelect.value,
-                    phone: document.getElementById('phone_number').value
-                };
-
-                try {
-                    const response = await fetch('/v1/dispense-data', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify(orderData)
-                    });
-
-                    const outcome = await response.json();
-
-                    if (response.ok && outcome.status === 'success') {
-                        statusAlert.textContent = `Transaction Successful! ID: ${outcome.transaction_id || 'N/A'}`;
-                        statusAlert.classList.add('alert-success');
-                    } else {
-                        statusAlert.textContent = `Error: ${outcome.message || 'The gateway core rejected the dispatch parameters.'}`;
-                        statusAlert.classList.add('alert-danger');
-                    }
-                } catch (err) {
-                    statusAlert.textContent = 'Critical error communicating with your backend application engine.';
-                    statusAlert.classList.add('alert-danger');
-                } finally {
-                    // Restore active interactive buttons
-                    statusAlert.style.display = 'block';
-                    submitBtn.disabled = false;
-                    btnSpinner.style.display = 'none';
-                    btnText.textContent = 'Dispense Data Bundle';
-                }
-            });
-
-            // Trigger initialization pipeline
-            fetchLiveMarketPlans();
+        const networkPlans = globalPlans[selectedNetwork] || [];
+        networkPlans.forEach(plan => {
+            const option = document.createElement('option');
+            option.value = plan.id;
+            option.textContent = plan.name;
+            planDropdown.appendChild(option);
         });
-    </script>
+    });
+
+    document.getElementById('vendingForm').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const btn = document.getElementById('submitBtn');
+        const statusBox = document.getElementById('status-box');
+        
+        btn.disabled = true;
+        btn.innerText = "Deploying Transaction Route...";
+        statusBox.style.display = "none";
+
+        try {
+            const response = await fetch('/v1/dispense-data', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    network: document.getElementById('network').value,
+                    plan_id: document.getElementById('plan_id').value,
+                    phone: document.getElementById('phone').value
+                })
+            });
+
+            const result = await response.json();
+            statusBox.style.display = "block";
+            
+            if (response.ok && result.status === "success") {
+                statusBox.className = "success";
+                statusBox.innerText = `Transaction Dispatched! Reference: ${result.transaction_id}`;
+            } else {
+                statusBox.className = "error";
+                statusBox.innerText = result.message || "Gateway processing error.";
+            }
+        } catch (err) {
+            statusBox.style.display = "block";
+            statusBox.className = "error";
+            statusBox.innerText = "Network Link Failure: Web page lost host connection.";
+        } finally {
+            btn.disabled = false;
+            btn.innerText = "Deploy Data Bundle";
+        }
+    });
+
+    // Run the plan synchronization script on boot
+    loadLivePlans();
+</script>
+
 </body>
 </html>
