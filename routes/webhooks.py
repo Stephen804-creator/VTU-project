@@ -26,7 +26,6 @@ order_service = OrderService()
 
 def verify_pairgate_signature():
 
-    # Production must always verify signatures.
     if settings.APP_ENV == "production":
 
         verify_signature = True
@@ -41,35 +40,11 @@ def verify_pairgate_signature():
 
         return True
 
-    secret = (
-        settings.PAIRGATE_WEBHOOK_SECRET
-    )
-
-    if not secret:
-
-        return False
-
-    # ------------------------------------------------------
-    # Development override
-    # ------------------------------------------------------
-
-    if not settings.PAIRGATE_WEBHOOK_VERIFY:
-
-        return True
-
-    # ------------------------------------------------------
-    # Secret must exist when verification is enabled
-    # ------------------------------------------------------
-
     secret = settings.PAIRGATE_WEBHOOK_SECRET
 
     if not secret:
 
         return False
-
-    # ------------------------------------------------------
-    # Read Pairgate security headers
-    # ------------------------------------------------------
 
     timestamp = request.headers.get(
         "X-Pairgate-Timestamp"
@@ -82,10 +57,6 @@ def verify_pairgate_signature():
     if not timestamp or not provided_signature:
 
         return False
-
-    # ------------------------------------------------------
-    # Validate timestamp
-    # ------------------------------------------------------
 
     try:
 
@@ -107,15 +78,6 @@ def verify_pairgate_signature():
 
         return False
 
-    # ------------------------------------------------------
-    # IMPORTANT:
-    #
-    # Use the RAW JSON request body.
-    #
-    # Do not use request.json here because Pairgate signs
-    # the exact raw JSON payload.
-    # ------------------------------------------------------
-
     raw_payload = request.get_data()
 
     signed_payload = (
@@ -124,19 +86,11 @@ def verify_pairgate_signature():
         + raw_payload
     )
 
-    # ------------------------------------------------------
-    # Calculate expected HMAC SHA-256 signature
-    # ------------------------------------------------------
-
     expected_signature = hmac.new(
         secret.encode("utf-8"),
         signed_payload,
         hashlib.sha256
     ).hexdigest()
-
-    # ------------------------------------------------------
-    # Constant-time comparison
-    # ------------------------------------------------------
 
     return hmac.compare_digest(
         expected_signature,
@@ -154,20 +108,12 @@ def verify_pairgate_signature():
 )
 def pairgate_webhook():
 
-    # ------------------------------------------------------
-    # Verify Pairgate signature BEFORE processing data
-    # ------------------------------------------------------
-
     if not verify_pairgate_signature():
 
         return error_response(
             "Invalid Pairgate webhook signature.",
             401
         )
-
-    # ------------------------------------------------------
-    # Parse JSON
-    # ------------------------------------------------------
 
     data = request.get_json(
         silent=True
@@ -183,12 +129,11 @@ def pairgate_webhook():
             400
         )
 
-    # ------------------------------------------------------
-    # Confirm this is a data purchase event
-    # ------------------------------------------------------
-
     event = str(
-        data.get("event", "")
+        data.get(
+            "event",
+            ""
+        )
     ).strip().lower()
 
     if event != "data.purchase":
@@ -197,10 +142,6 @@ def pairgate_webhook():
             "Unsupported Pairgate event.",
             400
         )
-
-    # ------------------------------------------------------
-    # Pairgate calls this reference_code
-    # ------------------------------------------------------
 
     reference = data.get(
         "reference_code"
@@ -213,12 +154,11 @@ def pairgate_webhook():
             400
         )
 
-    # ------------------------------------------------------
-    # Final status
-    # ------------------------------------------------------
-
     status = str(
-        data.get("status", "")
+        data.get(
+            "status",
+            ""
+        )
     ).strip().lower()
 
     if status not in {
@@ -235,15 +175,9 @@ def pairgate_webhook():
         "message"
     )
 
-    # Pairgate's reference_code is retained as the
-    # supplier reference in our order record.
     supplier_reference = str(
         reference
     )
-
-    # ------------------------------------------------------
-    # Process the order
-    # ------------------------------------------------------
 
     try:
 
@@ -265,9 +199,6 @@ def pairgate_webhook():
 
     except ValueError as error:
 
-        # An unknown reference is not a valid Subscribe Me
-        # order. We return 404 so it is visible in logs and
-        # Pairgate can retry if appropriate.
         return error_response(
             str(error),
             404
@@ -275,8 +206,6 @@ def pairgate_webhook():
 
     except Exception:
 
-        # Do not expose internal database/payment details
-        # to the external supplier.
         return error_response(
             "Could not process Pairgate webhook.",
             500
@@ -284,13 +213,7 @@ def pairgate_webhook():
 
 
 # ==========================================================
-# PAYMENT PROVIDER WEBHOOK
-# ==========================================================
-#
-# This is NOT Pairgate.
-#
-# This endpoint is reserved for the provider we will use
-# later for customer wallet funding.
+# GENERIC PAYMENT WEBHOOK
 # ==========================================================
 
 @webhooks_bp.route(
@@ -359,25 +282,36 @@ def payment_webhook():
 
     if status == "FAILED":
 
-        result = (
-            PaymentService.mark_failed_payment(
-                reference=reference
-            )
-        )
+        try:
 
-        return success_response(
-            data=result,
-            message="Payment marked as failed."
-        )
+            result = (
+                PaymentService
+                .mark_failed_payment(
+                    reference=reference
+                )
+            )
+
+            return success_response(
+                data=result,
+                message="Payment marked as failed."
+            )
+
+        except Exception:
+
+            return error_response(
+                "Payment processing failed.",
+                500
+            )
 
     return error_response(
         "Unsupported payment status.",
         400
     )
-    
-payment_provider_service = (
-    PaymentProviderService()
-)
+
+
+# ==========================================================
+# PAYSTACK WEBHOOK
+# ==========================================================
 
 @webhooks_bp.route(
     "/paystack",
@@ -391,22 +325,30 @@ def paystack_webhook():
         "x-paystack-signature"
     )
 
-    try:
-
-        provider = (
-            payment_provider_service
-            .get_provider("paystack")
-        )
-
-    except Exception:
+    if not signature:
 
         return error_response(
-            "Payment provider is not configured.",
+            "Paystack webhook signature is missing.",
+            401
+        )
+
+    secret_key = settings.PAYSTACK_SECRET_KEY
+
+    if not secret_key:
+
+        return error_response(
+            "Paystack secret key is not configured.",
             500
         )
 
-    if not provider.verify_webhook_signature(
+    expected_signature = hmac.new(
+        secret_key.encode("utf-8"),
         raw_payload,
+        hashlib.sha512
+    ).hexdigest()
+
+    if not hmac.compare_digest(
+        expected_signature,
         signature
     ):
 
@@ -436,12 +378,20 @@ def paystack_webhook():
         )
     ).strip().lower()
 
+    # ------------------------------------------------------
+    # We currently only need successful Paystack charges
+    # for wallet funding.
+    #
+    # Other Paystack events can safely be acknowledged
+    # without changing the wallet.
+    # ------------------------------------------------------
+
     if event != "charge.success":
 
         return success_response(
             message=(
-                "Webhook received but no wallet "
-                "funding action was required."
+                "Webhook received. "
+                "No wallet funding action was required."
             )
         )
 
@@ -455,7 +405,7 @@ def paystack_webhook():
     ):
 
         return error_response(
-            "Invalid transaction payload.",
+            "Invalid Paystack transaction payload.",
             400
         )
 
@@ -465,6 +415,10 @@ def paystack_webhook():
 
     amount = transaction.get(
         "amount"
+    )
+
+    provider_transaction_id = transaction.get(
+        "id"
     )
 
     if not reference:
@@ -483,20 +437,33 @@ def paystack_webhook():
 
     try:
 
+        amount_kobo = int(
+            amount
+        )
+
+    except (
+        TypeError,
+        ValueError
+    ):
+
+        return error_response(
+            "Invalid Paystack payment amount.",
+            400
+        )
+
+    try:
+
         result = (
             PaymentService
             .complete_verified_payment(
                 reference=reference,
-                provider_reference=
-                    str(
-                        transaction.get(
-                            "id"
-                        )
-                    )
-                    if transaction.get("id")
-                    else None,
+                provider_reference=(
+                    str(provider_transaction_id)
+                    if provider_transaction_id
+                    else None
+                ),
                 provider_amount_kobo=
-                    int(amount)
+                    amount_kobo
             )
         )
 
@@ -519,4 +486,4 @@ def paystack_webhook():
         return error_response(
             "Could not process Paystack webhook.",
             500
-        )
+    )
