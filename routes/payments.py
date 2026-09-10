@@ -20,6 +20,7 @@ from utils.responses import (
 
 from utils.csrf import csrf_required
 
+
 payments_bp = Blueprint(
     "payments",
     __name__,
@@ -31,6 +32,7 @@ payments_bp = Blueprint(
     "/create",
     methods=["POST"]
 )
+@csrf_required
 def create_payment():
 
     user_id = session.get(
@@ -199,10 +201,8 @@ def payment_callback():
                 PaymentService
                 .complete_verified_payment(
                     reference=reference,
-                    provider_reference=
-                        provider_reference,
-                    provider_amount_kobo=
-                        provider_amount
+                    provider_reference=provider_reference,
+                    provider_amount_kobo=provider_amount
                 )
             )
 
@@ -216,11 +216,8 @@ def payment_callback():
 
         return success_response(
             data={
-                "reference":
-                    reference,
-
-                "status":
-                    status or "unknown"
+                "reference": reference,
+                "status": status or "unknown"
             },
             message=(
                 "Payment has not been confirmed as successful."
@@ -239,11 +236,4 @@ def payment_callback():
         return error_response(
             "Could not verify payment.",
             500
-        )
-
-@payments_bp.route(
-    "/create",
-    methods=["POST"]
-)
-@csrf_required
-def create_payment():
+    )
