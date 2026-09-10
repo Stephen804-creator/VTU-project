@@ -4,6 +4,7 @@ from services.order_service import OrderService
 from utils.responses import success_response, error_response
 from utils.csrf import csrf_required
 
+
 orders_bp = Blueprint(
     "orders",
     __name__,
@@ -14,7 +15,11 @@ orders_bp = Blueprint(
 order_service = OrderService()
 
 
-@orders_bp.route("", methods=["POST"])
+@orders_bp.route(
+    "",
+    methods=["POST"]
+)
+@csrf_required
 def create_order():
 
     user_id = session.get("user_id")
@@ -168,10 +173,3 @@ def list_orders():
             "orders": orders
         }
     )
-
-@orders_bp.route(
-    "",
-    methods=["POST"]
-)
-@csrf_required
-def create_order():
