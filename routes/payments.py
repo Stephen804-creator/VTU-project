@@ -236,4 +236,4 @@ def payment_callback():
         return error_response(
             "Could not verify payment.",
             500
-    )
+        )
