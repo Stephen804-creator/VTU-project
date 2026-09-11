@@ -46,6 +46,15 @@ document
             showElement(
                 "fund-wallet-modal"
             );
+
+            // Clear previous input and messages
+            document.getElementById(
+                "fund-amount"
+            ).value = "";
+
+            hideElement(
+                "wallet-message"
+            );
         }
     );
 
@@ -65,6 +74,14 @@ document
             hideElement(
                 "fund-wallet-modal"
             );
+
+            hideElement(
+                "wallet-message"
+            );
+
+            document.getElementById(
+                "fund-amount"
+            ).value = "";
         }
     );
 
@@ -87,7 +104,7 @@ async function createPayment() {
 
     const amountInput =
         document.getElementById(
-            "fundAmount"
+            "fund-amount"
         );
 
     const amount = parseFloat(
@@ -97,12 +114,21 @@ async function createPayment() {
     if (!amount || amount <= 0) {
 
         showMessage(
+            "wallet-message",
             "Enter a valid funding amount.",
             "error"
         );
 
         return;
     }
+
+    const button =
+        document.getElementById(
+            "create-payment-button"
+        );
+
+    button.disabled = true;
+    button.textContent = "Processing...";
 
     try {
 
@@ -128,7 +154,20 @@ async function createPayment() {
             );
         }
 
-        closeFundWalletModal();
+        // Store payment reference for callback handling
+        const paymentReference =
+            result.data.payment.reference;
+
+        // Store in sessionStorage so we can verify it after redirect
+        sessionStorage.setItem(
+            "subscribeMe_paymentReference",
+            paymentReference
+        );
+
+        // Close modal before redirect
+        hideElement(
+            "fund-wallet-modal"
+        );
 
         /*
          * Send the customer to Paystack Checkout.
@@ -139,8 +178,12 @@ async function createPayment() {
     } catch (error) {
 
         showMessage(
+            "wallet-message",
             error.message,
             "error"
         );
+
+        button.disabled = false;
+        button.textContent = "Continue";
     }
 }
