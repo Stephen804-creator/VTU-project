@@ -45,8 +45,6 @@ def naira_to_kobo(value):
 
     return int(amount * 100)
 
-    return amount_kobo
-
 
 @payments_bp.route("/create", methods=["POST"])
 @csrf_required
@@ -94,9 +92,17 @@ def payment_callback():
     try:
         result = PaymentService.verify_paystack_payment(reference)
         provider_data = result["provider_response"].get("data", {})
+        if not isinstance(provider_data, dict):
+            raise ValueError("Invalid payment verification response.")
+
         status = str(provider_data.get("status", "")).lower()
 
         if status == "success":
+            if (
+                provider_data.get("reference") != reference
+                or str(provider_data.get("currency", "")).upper() != "NGN"
+            ):
+                raise ValueError("Payment details do not match the expected transaction.")
             completed = PaymentService.complete_verified_payment(
                 reference=reference,
                 provider_reference=provider_data.get("reference"),
