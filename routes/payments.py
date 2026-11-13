@@ -33,14 +33,17 @@ def naira_to_kobo(value):
 
     if amount <= 0:
         raise ValueError("Amount must be greater than zero.")
+    if amount > Decimal("1000000"):
+        raise ValueError("Maximum wallet funding amount is ₦1,000,000.")
 
     # Naira supports two decimal places; reject rather than silently round.
-    if amount != amount.quantize(Decimal("0.01")):
-        raise ValueError("Amount cannot have more than two decimal places.")
+    try:
+        if amount != amount.quantize(Decimal("0.01")):
+            raise ValueError("Amount cannot have more than two decimal places.")
+    except InvalidOperation:
+        raise ValueError("Invalid amount.") from None
 
-    amount_kobo = int(amount * 100)
-    if amount_kobo > 100_000_000:
-        raise ValueError("Maximum wallet funding amount is ₦1,000,000.")
+    return int(amount * 100)
 
     return amount_kobo
 
