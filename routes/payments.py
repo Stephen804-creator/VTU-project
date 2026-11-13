@@ -33,6 +33,27 @@ payments_bp = Blueprint(
 )
 
 
+
+
+def naira_to_kobo(value):
+    """Convert a Naira amount to integer kobo without binary float arithmetic."""
+    if isinstance(value, bool) or value is None:
+        raise ValueError("Invalid amount.")
+    try:
+        amount = Decimal(str(value))
+    except (InvalidOperation, TypeError, ValueError):
+        raise ValueError("Invalid amount.") from None
+    if not amount.is_finite():
+        raise ValueError("Invalid amount.")
+    if amount <= 0:
+        raise ValueError("Amount must be greater than zero.")
+    if amount > Decimal("1000000"):
+        raise ValueError("Maximum wallet funding amount is ₦1,000,000.")
+    if amount.as_tuple().exponent < -2:
+        raise ValueError("Amount cannot have more than two decimal places.")
+    return int(amount * 100)
+
+
 @payments_bp.route(
     "/create",
     methods=["POST"]
@@ -67,18 +88,9 @@ def create_payment():
         )
 
     try:
-        amount_decimal = Decimal(str(amount))
-    except (InvalidOperation, TypeError, ValueError):
-        return error_response("Invalid amount.", 400)
-
-    if not amount_decimal.is_finite() or amount_decimal <= 0:
-        return error_response("Amount must be greater than zero.", 400)
-    if amount_decimal > Decimal("1000000"):
-        return error_response("Maximum wallet funding amount is ₦1,000,000.", 400)
-    if amount_decimal.as_tuple().exponent < -2:
-        return error_response("Amount cannot have more than two decimal places.", 400)
-
-    amount_kobo = int(amount_decimal * 100)
+        amount_kobo = naira_to_kobo(amount)
+    except ValueError as error:
+        return error_response(str(error), 400)
 
     user = (
         AuthService
