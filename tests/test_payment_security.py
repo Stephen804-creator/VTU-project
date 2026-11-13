@@ -236,6 +236,110 @@ class PaymentDatabaseTests(unittest.TestCase):
         )
 
 
+
+class PairgateOrderIdempotencyTests(unittest.TestCase):
+    def setUp(self):
+        self.temp_dir = tempfile.TemporaryDirectory()
+        self.db_path = os.path.join(self.temp_dir.name, "orders.sqlite3")
+        connection = sqlite3.connect(self.db_path)
+        connection.executescript("""
+            CREATE TABLE wallets (
+                id INTEGER PRIMARY KEY,
+                user_id INTEGER UNIQUE NOT NULL,
+                balance_kobo INTEGER NOT NULL DEFAULT 0,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE TABLE data_plans (
+                id INTEGER PRIMARY KEY,
+                name TEXT,
+                data_amount TEXT,
+                validity TEXT
+            );
+            CREATE TABLE orders (
+                id INTEGER PRIMARY KEY,
+                reference TEXT UNIQUE NOT NULL,
+                user_id INTEGER NOT NULL,
+                phone TEXT NOT NULL,
+                network TEXT NOT NULL,
+                plan_id INTEGER,
+                supplier TEXT NOT NULL,
+                supplier_plan_id TEXT NOT NULL,
+                amount_kobo INTEGER NOT NULL,
+                status TEXT NOT NULL,
+                supplier_reference TEXT,
+                message TEXT,
+                updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+            );
+            CREATE TABLE wallet_transactions (
+                id INTEGER PRIMARY KEY,
+                user_id INTEGER NOT NULL,
+                type TEXT NOT NULL,
+                amount_kobo INTEGER NOT NULL,
+                reference TEXT UNIQUE NOT NULL,
+                description TEXT,
+                status TEXT NOT NULL
+            );
+            INSERT INTO wallets(id, user_id, balance_kobo) VALUES (1, 1, 0);
+            INSERT INTO data_plans(id, name, data_amount, validity)
+                VALUES (1, '1GB plan', '1GB', '30 days');
+            INSERT INTO orders(
+                id, reference, user_id, phone, network, plan_id, supplier,
+                supplier_plan_id, amount_kobo, status
+            ) VALUES (
+                1, 'ORD-TEST-001', 1, '08012345678', 'mtn', 1, 'pairgate',
+                'PLAN-1', 15000, 'PROCESSING'
+            );
+        """)
+        connection.commit()
+        connection.close()
+
+        def connect():
+            db = sqlite3.connect(self.db_path, timeout=15)
+            db.row_factory = sqlite3.Row
+            db.execute("PRAGMA foreign_keys = ON")
+            return db
+
+        self.connection_factory = connect
+        self.order_patch = patch("services.order_service.get_connection", side_effect=connect)
+        self.wallet_patch = patch("services.wallet_service.get_connection", side_effect=connect)
+        self.order_patch.start()
+        self.wallet_patch.start()
+
+        from services.order_service import OrderService
+        self.service = OrderService()
+
+    def tearDown(self):
+        self.order_patch.stop()
+        self.wallet_patch.stop()
+        self.temp_dir.cleanup()
+
+    def test_duplicate_pairgate_failure_event_refunds_once(self):
+        first = self.service.process_pairgate_webhook(
+            "ORD-TEST-001", "failed", "Supplier failed"
+        )
+        second = self.service.process_pairgate_webhook(
+            "ORD-TEST-001", "failed", "Supplier failed"
+        )
+
+        connection = self.connection_factory()
+        try:
+            balance = connection.execute(
+                "SELECT balance_kobo FROM wallets WHERE user_id = 1"
+            ).fetchone()[0]
+            ledger_count = connection.execute(
+                "SELECT COUNT(*) FROM wallet_transactions WHERE reference = 'REFUND-ORD-TEST-001'"
+            ).fetchone()[0]
+            order_status = connection.execute(
+                "SELECT status FROM orders WHERE reference = 'ORD-TEST-001'"
+            ).fetchone()[0]
+        finally:
+            connection.close()
+
+        self.assertEqual(first["status"], "refunded")
+        self.assertEqual(second["status"], "already_processed")
+        self.assertEqual((balance, ledger_count, order_status), (15000, 1, "REFUNDED"))
+
+
 class WebhookSignatureTests(unittest.TestCase):
     def setUp(self):
         self.app = Flask(__name__)
