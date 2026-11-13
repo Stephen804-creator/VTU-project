@@ -1,3 +1,5 @@
+from decimal import Decimal, InvalidOperation
+
 from database.database import get_connection
 from services.supplier_service import SupplierService
 
@@ -38,17 +40,22 @@ class PlanService:
                     plan.get("name", "Unnamed Plan")
                 )
 
-                price_naira = float(
-                    plan.get("price", 0)
-                )
+                try:
+                    price_naira = Decimal(str(plan.get("price", 0)))
+                except (InvalidOperation, TypeError, ValueError):
+                    raise ValueError("Supplier returned an invalid plan price.") from None
+
+                if not price_naira.is_finite() or price_naira < 0:
+                    raise ValueError("Supplier returned an invalid plan price.")
+
+                if price_naira != price_naira.quantize(Decimal("0.01")):
+                    raise ValueError("Supplier plan price has more than two decimal places.")
 
                 duration = plan.get(
                     "duration"
                 )
 
-                supplier_price_kobo = int(
-                    round(price_naira * 100)
-                )
+                supplier_price_kobo = int(price_naira * 100)
 
                 # Initially our selling price equals
                 # supplier price.
