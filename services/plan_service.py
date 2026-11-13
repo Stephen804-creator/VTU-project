@@ -48,8 +48,11 @@ class PlanService:
                 if not price_naira.is_finite() or price_naira < 0:
                     raise ValueError("Supplier returned an invalid plan price.")
 
-                if price_naira != price_naira.quantize(Decimal("0.01")):
-                    raise ValueError("Supplier plan price has more than two decimal places.")
+                try:
+                    if price_naira != price_naira.quantize(Decimal("0.01")):
+                        raise ValueError("Supplier plan price has more than two decimal places.")
+                except InvalidOperation:
+                    raise ValueError("Supplier returned an invalid plan price.") from None
 
                 duration = plan.get(
                     "duration"
