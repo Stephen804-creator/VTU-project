@@ -62,7 +62,7 @@ class ProductionSecretTests(unittest.TestCase):
             env["SECRET_KEY"] = secret
         return subprocess.run(
             [sys.executable, "-c", "import config.settings"],
-            cwd=os.path.dirname(os.path.dirname(__file__)),
+            cwd=os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir)),
             env=env,
             capture_output=True,
             text=True,
@@ -291,6 +291,68 @@ class WebhookSignatureTests(unittest.TestCase):
             provider_reference="123",
             provider_amount_kobo=25000,
         )
+
+
+    def test_pairgate_valid_signature_is_accepted_within_timestamp_window(self):
+        from routes.webhooks import order_service
+        from unittest.mock import patch
+        import time
+
+        body = json.dumps({
+            "event": "data.purchase",
+            "reference_code": "ORD-TEST-001",
+            "status": "successful",
+        }).encode()
+        timestamp = str(int(time.time()))
+        signed_payload = timestamp.encode() + b"." + body
+        signature = hmac.new(
+            os.environ["PAIRGATE_WEBHOOK_SECRET"].encode(),
+            signed_payload,
+            hashlib.sha256,
+        ).hexdigest()
+
+        with patch.object(
+            order_service,
+            "process_pairgate_webhook",
+            return_value={"status": "success"},
+        ) as process:
+            response = self.client.post(
+                "/api/v1/webhooks/pairgate",
+                data=body,
+                content_type="application/json",
+                headers={
+                    "X-Pairgate-Timestamp": timestamp,
+                    "X-Pairgate-Signature": signature,
+                },
+            )
+
+        self.assertEqual(response.status_code, 200)
+        process.assert_called_once()
+
+    def test_pairgate_stale_signed_request_is_rejected(self):
+        import time
+
+        body = json.dumps({
+            "event": "data.purchase",
+            "reference_code": "ORD-TEST-001",
+            "status": "successful",
+        }).encode()
+        timestamp = str(int(time.time()) - 3600)
+        signature = hmac.new(
+            os.environ["PAIRGATE_WEBHOOK_SECRET"].encode(),
+            timestamp.encode() + b"." + body,
+            hashlib.sha256,
+        ).hexdigest()
+        response = self.client.post(
+            "/api/v1/webhooks/pairgate",
+            data=body,
+            content_type="application/json",
+            headers={
+                "X-Pairgate-Timestamp": timestamp,
+                "X-Pairgate-Signature": signature,
+            },
+        )
+        self.assertEqual(response.status_code, 401)
 
     def test_legacy_unsigned_payment_webhook_is_disabled(self):
         response = self.client.post(
