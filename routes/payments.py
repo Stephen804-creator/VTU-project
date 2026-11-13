@@ -1,3 +1,4 @@
+import logging
 from decimal import Decimal, InvalidOperation
 
 from flask import Blueprint, request, session, url_for
@@ -7,6 +8,8 @@ from services.payment_service import PaymentService
 from utils.responses import success_response, error_response
 from utils.csrf import csrf_required
 
+
+logger = logging.getLogger(__name__)
 
 payments_bp = Blueprint(
     "payments",
@@ -75,8 +78,7 @@ def create_payment():
             message="Payment initialized successfully."
         )
     except Exception:
-        from utils.logging_config import configure_logging
-        configure_logging().exception("Could not initialize Paystack payment.")
+        logger.exception("Could not initialize Paystack payment.")
         return error_response("Could not initialize payment. Please try again.", 500)
 
 
@@ -109,6 +111,5 @@ def payment_callback():
     except ValueError as error:
         return error_response(str(error), 400)
     except Exception:
-        from utils.logging_config import configure_logging
-        configure_logging().exception("Could not verify Paystack payment callback.")
+        logger.exception("Could not verify Paystack payment callback.")
         return error_response("Could not verify payment. Please try again.", 500)
