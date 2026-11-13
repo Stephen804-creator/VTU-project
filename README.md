@@ -117,7 +117,7 @@ It creates a user and promotes that account to the administrator role. Use a uni
 - Payment and wallet balances are persisted in integer kobo. Provider-reported Paystack amounts are compared with the stored payment amount before crediting.
 - A Paystack webhook must have a valid HMAC-SHA512 signature over the exact raw request body. The webhook endpoint does not trust a client-supplied payment status.
 - Paystack's webhook contract does not provide a signed timestamp header for this flow. Replay safety therefore relies on the atomic pending-to-success payment transition and the unique `FUND-{payment_reference}` wallet-ledger reference. A callback and a webhook racing for the same payment cannot both credit it.
-- Pairgate webhooks use HMAC-SHA256 over `timestamp + "." + raw request body`, with a default 300-second timestamp tolerance. Signature verification is mandatory in production. Duplicate terminal order notifications are handled by order-state checks; refund credits use a deterministic `REFUND-{order_reference}` ledger reference.
+- Pairgate webhooks currently expect HMAC-SHA256 over `timestamp + "." + raw request body`, supplied in `X-Pairgate-Timestamp` and `X-Pairgate-Signature`, with a default 300-second timestamp tolerance. Signature verification is mandatory in production. Confirm this exact signing format and header contract against the webhook documentation enabled for your Pairgate account before going live; this repository's implementation is not proof of the provider's contract. Duplicate terminal order notifications are handled by order-state checks; refund credits use a deterministic `REFUND-{order_reference}` ledger reference.
 - The legacy generic `/api/v1/webhooks/payment` endpoint is disabled because it has no provider-authentication contract. Use the signed provider-specific endpoints.
 
 ## Important routes
@@ -147,7 +147,13 @@ It creates a user and promotes that account to the administrator role. Use a uni
 
 ## Tests
 
-There is currently no automated test suite or test command declared in `requirements.txt`. Before production use, add and run unit and integration coverage for amount parsing, missing production secrets, invalid signatures, stale Pairgate timestamps, duplicate webhook delivery, callback/webhook races, wallet-credit idempotency, and supplier refund races.
+A standard-library `unittest` regression suite is included. Run it with:
+
+```bash
+python -m unittest discover -s tests -v
+```
+
+GitHub Actions runs the same suite on pushes to this hardening branch and on pull requests targeting `main`. Coverage includes exact amount parsing, production secret enforcement, payment amount/provider checks, wallet-credit idempotency, concurrent duplicate payment completion, Paystack signature verification, Pairgate signature and timestamp-window checks, duplicate Pairgate failure notifications, and disabling the unauthenticated legacy payment webhook. Live provider contract tests and production database concurrency tests remain necessary before enabling real-money traffic.
 
 ## License
 
