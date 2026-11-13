@@ -27,6 +27,8 @@ class Settings:
         if (
             len(_secret_key) < 32
             or _secret_key.lower() in _insecure_secret_values
+            or "replace-with-" in _secret_key.lower()
+            or "change-this" in _secret_key.lower()
         ):
             raise RuntimeError(
                 "A strong SECRET_KEY (at least 32 characters) "
