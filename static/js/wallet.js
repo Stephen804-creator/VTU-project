@@ -107,11 +107,10 @@ async function createPayment() {
             "fund-amount"
         );
 
-    const amount = parseFloat(
-        amountInput.value
-    );
+    const amount = amountInput.value.trim();
+    const amountPattern = /^(?:0|[1-9]\\d*)(?:\\.\\d{1,2})?$/;
 
-    if (!amount || amount <= 0) {
+    if (!amountPattern.test(amount)) {
 
         showMessage(
             "wallet-message",
