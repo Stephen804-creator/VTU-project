@@ -64,7 +64,7 @@ Generate a strong Flask secret:
 python -c "import secrets; print(secrets.token_hex(32))"
 ```
 
-Set the generated value as `SECRET_KEY`. Do not commit `.env` or real credentials. For production, set `APP_ENV=production`, provide a unique `SECRET_KEY` of at least 32 characters, and configure both `PAYSTACK_SECRET_KEY` and `PAIRGATE_WEBHOOK_SECRET`. Production startup fails when these required secrets are absent or invalid.
+Set the generated value as `SECRET_KEY`. Do not commit `.env` or real credentials. For production, set `APP_ENV=production`, provide a unique `SECRET_KEY` of at least 32 characters, and configure `PAYSTACK_SECRET_KEY`, `PAIRGATE_API_KEY`, and `PAIRGATE_WEBHOOK_SECRET`. Production startup fails when these required secrets are absent or invalid.
 
 For a local run, `APP_ENV=development` and the provider test-mode flags can remain enabled. Configure provider credentials before testing provider-backed operations.
 
