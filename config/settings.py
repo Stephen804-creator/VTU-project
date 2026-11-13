@@ -62,6 +62,8 @@ class Settings:
     if APP_ENV == "production":
         if not PAYSTACK_SECRET_KEY:
             raise RuntimeError("PAYSTACK_SECRET_KEY must be configured in production.")
+        if not PAIRGATE_API_KEY:
+            raise RuntimeError("PAIRGATE_API_KEY must be configured in production.")
         if not PAIRGATE_WEBHOOK_SECRET:
             raise RuntimeError("PAIRGATE_WEBHOOK_SECRET must be configured in production.")
         if PAIRGATE_WEBHOOK_TOLERANCE_SECONDS <= 0:
