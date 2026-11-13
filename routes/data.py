@@ -1,4 +1,5 @@
 import logging
+from decimal import Decimal
 
 from flask import Blueprint, request
 
@@ -37,7 +38,10 @@ def plans():
         "data_amount": plan["data_amount"],
         "validity": plan["validity"],
         "price_kobo": plan["selling_price_kobo"],
-        "price_naira": plan["selling_price_kobo"] / 100
+        "price_naira": format(
+            Decimal(int(plan["selling_price_kobo"])) / Decimal("100"),
+            ".2f"
+        )
     } for plan in plans]
     return success_response(
         data={"plans": formatted_plans, "count": len(formatted_plans)}
