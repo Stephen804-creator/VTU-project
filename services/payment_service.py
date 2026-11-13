@@ -277,19 +277,6 @@ class PaymentService:
                     "This payment has already failed."
                 )
 
-            if (
-                provider_amount_kobo
-                is not None
-                and
-                int(provider_amount_kobo)
-                != int(payment["amount_kobo"])
-            ):
-
-                raise ValueError(
-                    "Payment amount does not match "
-                    "the expected wallet funding amount."
-                )
-
             cursor.execute("""
                 UPDATE payments
                 SET
