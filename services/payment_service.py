@@ -99,6 +99,9 @@ class PaymentService:
                 raise ValueError("Payment record not found.")
             payment = dict(payment)
 
+            if payment["provider"] != "paystack":
+                raise ValueError("Payment provider does not match this verification flow.")
+
             if provider_amount_kobo is None:
                 raise ValueError("Verified provider amount is required.")
             try:
