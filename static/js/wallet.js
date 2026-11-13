@@ -108,7 +108,7 @@ async function createPayment() {
         );
 
     const amount = amountInput.value.trim();
-    const amountPattern = /^(?:0|[1-9]\\d*)(?:\\.\\d{1,2})?$/;
+    const amountPattern = /^(?:0|[1-9][0-9]*)(?:[.][0-9]{1,2})?$/;
 
     if (!amountPattern.test(amount)) {
 
