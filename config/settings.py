@@ -56,14 +56,6 @@ class Settings:
             "PAIRGATE_WEBHOOK_TOLERANCE_SECONDS must be between 30 and 900."
         )
 
-    if (
-        APP_ENV == "production"
-        and PAIRGATE_API_KEY
-        and not PAIRGATE_WEBHOOK_SECRET
-    ):
-        raise RuntimeError(
-            "PAIRGATE_WEBHOOK_SECRET is required when Pairgate is enabled."
-        )
 
     DATABASE_PATH = os.getenv(
         "DATABASE_PATH",
@@ -86,6 +78,15 @@ class Settings:
         ).lower()
         == "true"
     )
+
+    if (
+        APP_ENV == "production"
+        and PAIRGATE_API_KEY
+        and not PAIRGATE_WEBHOOK_SECRET
+    ):
+        raise RuntimeError(
+            "PAIRGATE_WEBHOOK_SECRET is required when Pairgate is enabled."
+        )
 
     PAYSTACK_SECRET_KEY = os.getenv(
         "PAYSTACK_SECRET_KEY"
