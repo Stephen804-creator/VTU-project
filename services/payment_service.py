@@ -7,9 +7,17 @@ from utils.references import generate_reference
 
 class PaymentService:
 
-    provider_service = (
-        PaymentProviderService()
-    )
+    provider_service = None
+
+    @staticmethod
+    def get_provider(provider_name="paystack"):
+        # Defer provider construction until a payment operation is requested.
+        # This lets the application and non-payment routes start without
+        # payment credentials configured.
+        if PaymentService.provider_service is None:
+            PaymentService.provider_service = PaymentProviderService()
+
+        return PaymentService.provider_service.get_provider(provider_name)
 
     @staticmethod
     def create_payment(
@@ -130,9 +138,7 @@ class PaymentService:
 
         try:
             provider = (
-                PaymentService
-                .provider_service
-                .get_provider("paystack")
+                PaymentService.get_provider("paystack")
             )
 
             result = provider.initialize_transaction(
@@ -189,7 +195,7 @@ class PaymentService:
         if payment["provider"] != "paystack":
             raise ValueError("Payment provider does not match Paystack.")
 
-        provider = PaymentService.provider_service.get_provider("paystack")
+        provider = PaymentService.get_provider("paystack")
         result = provider.verify_transaction(reference)
         provider_data = result.get("data") if isinstance(result, dict) else None
 
