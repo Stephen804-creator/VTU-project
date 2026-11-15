@@ -213,7 +213,7 @@ def pairgate_webhook():
 
 
 # ==========================================================
-# GENERIC PAYMENT WEBHOOK
+# LEGACY GENERIC PAYMENT WEBHOOK
 # ==========================================================
 
 @webhooks_bp.route(
@@ -221,91 +221,12 @@ def pairgate_webhook():
     methods=["POST"]
 )
 def payment_webhook():
-
-    data = request.get_json(
-        silent=True
-    ) or {}
-
-    reference = data.get(
-        "reference"
-    )
-
-    status = str(
-        data.get(
-            "status",
-            ""
-        )
-    ).upper()
-
-    provider_reference = data.get(
-        "provider_reference"
-    )
-
-    if not reference:
-
-        return error_response(
-            "Payment reference is required.",
-            400
-        )
-
-    if status == "SUCCESS":
-
-        try:
-
-            result = (
-                PaymentService
-                .mark_successful_payment(
-                    reference=reference,
-                    provider_reference=
-                        provider_reference
-                )
-            )
-
-            return success_response(
-                data=result,
-                message="Payment processed."
-            )
-
-        except ValueError as error:
-
-            return error_response(
-                str(error),
-                400
-            )
-
-        except Exception:
-
-            return error_response(
-                "Payment processing failed.",
-                500
-            )
-
-    if status == "FAILED":
-
-        try:
-
-            result = (
-                PaymentService
-                .mark_failed_payment(
-                    reference=reference
-                )
-            )
-
-            return success_response(
-                data=result,
-                message="Payment marked as failed."
-            )
-
-        except Exception:
-
-            return error_response(
-                "Payment processing failed.",
-                500
-            )
-
+    # This endpoint previously accepted unsigned client-supplied
+    # payment statuses. It is intentionally disabled: payment
+    # state may only be changed by a verified provider callback.
     return error_response(
-        "Unsupported payment status.",
-        400
+        "This payment webhook is disabled. Use the verified provider endpoint.",
+        410
     )
 
 
