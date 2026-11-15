@@ -184,11 +184,7 @@ def payment_callback():
             )
         ).lower()
 
-        provider_reference = (
-            provider_data.get(
-                "reference"
-            )
-        )
+        provider_reference = provider_data.get("id")
 
         provider_amount = (
             provider_data.get(
