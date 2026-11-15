@@ -23,7 +23,7 @@ class Settings:
     APP_ENV = os.getenv(
         "APP_ENV",
         "development"
-    )
+    ).strip().lower()
 
     SECRET_KEY = os.getenv("SECRET_KEY")
     if not SECRET_KEY:
@@ -74,8 +74,8 @@ class Settings:
     PAIRGATE_TEST_MODE = (
         os.getenv(
             "PAIRGATE_TEST_MODE",
-            "true"
-        ).lower()
+            "false" if APP_ENV == "production" else "true"
+        ).strip().lower()
         == "true"
     )
 
@@ -100,9 +100,19 @@ class Settings:
     PAYSTACK_TEST_MODE = (
         os.getenv(
             "PAYSTACK_TEST_MODE",
-            "true"
-        ).lower() == "true"
+            "false" if APP_ENV == "production" else "true"
+        ).strip().lower() == "true"
     )
+    if APP_ENV == "production" and PAIRGATE_TEST_MODE:
+        raise RuntimeError(
+            "PAIRGATE_TEST_MODE must be false in production."
+        )
+
+    if APP_ENV == "production" and PAYSTACK_TEST_MODE:
+        raise RuntimeError(
+            "PAYSTACK_TEST_MODE must be false in production."
+        )
+
     PORT = int(
         os.getenv(
             "PORT",
