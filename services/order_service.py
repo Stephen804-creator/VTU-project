@@ -19,10 +19,51 @@ class OrderService:
         self,
         user_id,
         plan_id,
-        phone
+        phone,
+        idempotency_key=None
     ):
 
         phone = str(phone).strip()
+
+        if idempotency_key is not None:
+            idempotency_key = str(idempotency_key).strip()
+            if not 16 <= len(idempotency_key) <= 128:
+                raise ValueError("Idempotency-Key must be between 16 and 128 characters.")
+
+            connection = get_connection()
+            try:
+                cursor = connection.cursor()
+                cursor.execute("""
+                    SELECT reference, plan_id, phone, status, message
+                    FROM orders
+                    WHERE user_id = ? AND idempotency_key = ?
+                """, (user_id, idempotency_key))
+                existing = cursor.fetchone()
+                if existing:
+                    existing = dict(existing)
+                    if (
+                        int(existing["plan_id"] or 0) != int(plan_id)
+                        or existing["phone"] != phone
+                    ):
+                        raise ValueError(
+                            "This Idempotency-Key was already used for a different order."
+                        )
+
+                    status = str(existing["status"]).upper()
+                    status_map = {
+                        "SUCCESS": "success",
+                        "PENDING": "processing",
+                        "PROCESSING": "processing",
+                        "REFUNDED": "refunded",
+                        "FAILED": "failed"
+                    }
+                    return {
+                        "status": status_map.get(status, "processing"),
+                        "reference": existing["reference"],
+                        "message": existing["message"] or "This order was already submitted."
+                    }
+            finally:
+                connection.close()
 
         if not validate_phone(phone):
 
@@ -61,32 +102,63 @@ class OrderService:
 
             cursor = connection.cursor()
 
-            cursor.execute("""
-                INSERT INTO orders (
-                    reference,
-                    user_id,
-                    phone,
-                    network,
-                    plan_id,
-                    supplier,
-                    supplier_plan_id,
-                    amount_kobo,
-                    status,
-                    message
-                )
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                reference,
-                user_id,
-                phone,
-                plan["network"],
-                plan["id"],
-                plan["supplier"],
-                plan["supplier_plan_id"],
-                amount_kobo,
-                "PENDING",
-                "Order created."
-            ))
+            if idempotency_key:
+                cursor.execute("""
+                    INSERT OR IGNORE INTO orders (
+                        reference, user_id, phone, network, plan_id,
+                        supplier, supplier_plan_id, amount_kobo,
+                        status, message, idempotency_key
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    reference, user_id, phone, plan["network"],
+                    plan["id"], plan["supplier"], plan["supplier_plan_id"],
+                    amount_kobo, "PENDING", "Order created.", idempotency_key
+                ))
+
+                if cursor.rowcount == 0:
+                    cursor.execute("""
+                        SELECT reference, plan_id, phone, status, message
+                        FROM orders
+                        WHERE user_id = ? AND idempotency_key = ?
+                    """, (user_id, idempotency_key))
+                    existing = cursor.fetchone()
+                    if not existing:
+                        raise RuntimeError("Order idempotency conflict could not be resolved.")
+                    existing = dict(existing)
+                    if (
+                        int(existing["plan_id"] or 0) != int(plan_id)
+                        or existing["phone"] != phone
+                    ):
+                        raise ValueError(
+                            "This Idempotency-Key was already used for a different order."
+                        )
+                    connection.commit()
+                    status = str(existing["status"]).upper()
+                    status_map = {
+                        "SUCCESS": "success",
+                        "PENDING": "processing",
+                        "PROCESSING": "processing",
+                        "REFUNDED": "refunded",
+                        "FAILED": "failed"
+                    }
+                    return {
+                        "status": status_map.get(status, "processing"),
+                        "reference": existing["reference"],
+                        "message": existing["message"] or "This order was already submitted."
+                    }
+            else:
+                cursor.execute("""
+                    INSERT INTO orders (
+                        reference, user_id, phone, network, plan_id,
+                        supplier, supplier_plan_id, amount_kobo, status, message
+                    )
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    reference, user_id, phone, plan["network"], plan["id"],
+                    plan["supplier"], plan["supplier_plan_id"], amount_kobo,
+                    "PENDING", "Order created."
+                ))
 
             connection.commit()
 
