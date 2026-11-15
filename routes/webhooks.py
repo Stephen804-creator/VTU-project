@@ -330,17 +330,27 @@ def paystack_webhook():
             400
         )
 
-    reference = transaction.get(
-        "reference"
-    )
+    reference = transaction.get("reference")
+    amount = transaction.get("amount")
+    provider_transaction_id = transaction.get("id")
 
-    amount = transaction.get(
-        "amount"
-    )
+    if str(transaction.get("status", "")).lower() != "success":
+        return error_response(
+            "Paystack transaction is not successful.",
+            400
+        )
 
-    provider_transaction_id = transaction.get(
-        "id"
-    )
+    if str(transaction.get("currency", "")).upper() != "NGN":
+        return error_response(
+            "Paystack transaction currency is not NGN.",
+            400
+        )
+
+    if provider_transaction_id in (None, ""):
+        return error_response(
+            "Paystack transaction ID is missing.",
+            400
+        )
 
     if not reference:
 
