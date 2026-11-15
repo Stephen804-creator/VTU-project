@@ -395,6 +395,14 @@ class OrderService:
             order["status"]
         ).upper()
 
+        if current_status not in {"PROCESSING", "SUCCESS", "REFUNDED"}:
+            return {
+                "status": "ignored",
+                "reference": reference,
+                "order_status": current_status,
+                "message": "Order is not in a state that accepts supplier callbacks."
+            }
+
         # ------------------------------------------------------
         # SUCCESSFUL ORDER
         # ------------------------------------------------------
@@ -520,56 +528,71 @@ class OrderService:
         reason
     ):
 
-        refund_reference = (
-            f"REFUND-{order_reference}"
-        )
+        if not user_id or int(amount_kobo) <= 0:
+            raise ValueError("A valid user and positive refund amount are required.")
 
+        refund_reference = f"REFUND-{order_reference}"
         connection = get_connection()
 
         try:
-
             cursor = connection.cursor()
+            cursor.execute("BEGIN IMMEDIATE")
 
             cursor.execute("""
                 SELECT id
                 FROM wallet_transactions
                 WHERE reference = ?
+            """, (refund_reference,))
+
+            if cursor.fetchone():
+                connection.commit()
+                return {
+                    "status": "already_refunded",
+                    "reference": refund_reference
+                }
+
+            cursor.execute("""
+                UPDATE wallets
+                SET
+                    balance_kobo = balance_kobo + ?,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE user_id = ?
+            """, (int(amount_kobo), user_id))
+
+            if cursor.rowcount != 1:
+                raise ValueError("Wallet not found for refund.")
+
+            cursor.execute("""
+                INSERT INTO wallet_transactions (
+                    user_id,
+                    type,
+                    amount_kobo,
+                    reference,
+                    description,
+                    status
+                )
+                VALUES (?, 'CREDIT', ?, ?, ?, 'SUCCESS')
             """, (
+                user_id,
+                int(amount_kobo),
                 refund_reference,
+                f"Refund for {plan_name}. Reason: {reason}"
             ))
 
-            existing = cursor.fetchone()
-
-        finally:
-
-            connection.close()
-
-        if existing:
+            connection.commit()
 
             return {
-                "status": "already_refunded",
-                "reference": refund_reference
+                "status": "refunded",
+                "reference": refund_reference,
+                "amount_kobo": int(amount_kobo)
             }
 
-        wallet_transaction = (
-            WalletService.credit_wallet(
-                user_id=user_id,
-                amount_kobo=amount_kobo,
-                reference=refund_reference,
-                description=(
-                    f"Refund for {plan_name}. "
-                    f"Reason: {reason}"
-                )
-            )
-        )
+        except Exception:
+            connection.rollback()
+            raise
 
-        return {
-            "status": "refunded",
-            "reference": refund_reference,
-            "amount_kobo": amount_kobo,
-            "wallet_transaction":
-                wallet_transaction
-        }
+        finally:
+            connection.close()
 
     # ==========================================================
     # DATABASE HELPERS
