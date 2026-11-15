@@ -1,3 +1,5 @@
+from decimal import Decimal, InvalidOperation
+
 from flask import (
     Blueprint,
     request,
@@ -61,37 +63,36 @@ def create_payment():
             400
         )
 
+    if isinstance(amount, bool):
+        return error_response("Invalid amount.", 400)
+
     try:
+        amount_decimal = Decimal(str(amount))
+    except (InvalidOperation, TypeError, ValueError):
+        return error_response("Invalid amount.", 400)
 
-        amount = float(amount)
+    if not amount_decimal.is_finite():
+        return error_response("Invalid amount.", 400)
 
-    except (
-        TypeError,
-        ValueError
-    ):
-
-        return error_response(
-            "Invalid amount.",
-            400
-        )
-
-    if amount <= 0:
-
+    if amount_decimal <= 0:
         return error_response(
             "Amount must be greater than zero.",
             400
         )
 
-    if amount > 1000000:
-
+    if amount_decimal > Decimal("1000000.00"):
         return error_response(
             "Maximum wallet funding amount is ₦1,000,000.",
             400
         )
 
-    amount_kobo = int(
-        round(amount * 100)
-    )
+    if amount_decimal != amount_decimal.quantize(Decimal("0.01")):
+        return error_response(
+            "Amount must not contain more than two decimal places.",
+            400
+        )
+
+    amount_kobo = int(amount_decimal * 100)
 
     user = (
         AuthService
@@ -131,11 +132,11 @@ def create_payment():
             )
         )
 
-    except Exception as error:
+    except Exception:
 
         return error_response(
-            f"Could not initialize payment: {str(error)}",
-            500
+            "Could not initialize payment. Please try again.",
+            502
         )
 
 
