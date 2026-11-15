@@ -365,28 +365,37 @@ class OrderService:
                 "Supplier rejected the order."
             )
 
-            self._refund_customer(
-                user_id=user_id,
-                amount_kobo=amount_kobo,
-                order_reference=reference,
-                plan_name=plan["name"],
-                reason=reason
+            transition = self.process_pairgate_webhook(
+                reference=reference,
+                status="failed",
+                message=reason,
+                supplier_reference=supplier_reference
             )
 
-            self._update_order(
-                reference=reference,
-                status="REFUNDED",
-                message=reason,
-                supplier_reference=
-                    supplier_reference
-            )
+            if transition.get("order_status") == "SUCCESS":
+                return {
+                    "status": "success",
+                    "reference": reference,
+                    "supplier_reference": supplier_reference,
+                    "message": "The supplier confirmed the order as successful."
+                }
+
+            if transition.get("order_status") == "REFUNDED":
+                return {
+                    "status": "refunded",
+                    "reference": reference,
+                    "message": (
+                        "The supplier rejected the order. "
+                        "Your wallet has been refunded."
+                    )
+                }
 
             return {
-                "status": "refunded",
+                "status": "processing",
                 "reference": reference,
                 "message": (
-                    "The supplier rejected the order. "
-                    "Your wallet has been refunded."
+                    "The supplier response conflicts with a concurrent status update. "
+                    "The order is being reconciled."
                 )
             }
 
