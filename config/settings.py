@@ -25,10 +25,45 @@ class Settings:
         "development"
     )
 
-    SECRET_KEY = os.getenv(
-        "SECRET_KEY",
-        "development-secret-change-me"
+    SECRET_KEY = os.getenv("SECRET_KEY")
+    if not SECRET_KEY:
+        if APP_ENV == "production":
+            raise RuntimeError(
+                "SECRET_KEY must be configured in production."
+            )
+        SECRET_KEY = "development-only-insecure-secret"
+
+    PAIRGATE_WEBHOOK_SECRET = os.getenv(
+        "PAIRGATE_WEBHOOK_SECRET"
     )
+
+    PAIRGATE_WEBHOOK_VERIFY = (
+        os.getenv("PAIRGATE_WEBHOOK_VERIFY", "true").strip().lower()
+        == "true"
+    )
+
+    try:
+        PAIRGATE_WEBHOOK_TOLERANCE_SECONDS = int(
+            os.getenv("PAIRGATE_WEBHOOK_TOLERANCE_SECONDS", "300")
+        )
+    except ValueError as error:
+        raise RuntimeError(
+            "PAIRGATE_WEBHOOK_TOLERANCE_SECONDS must be an integer."
+        ) from error
+
+    if not 30 <= PAIRGATE_WEBHOOK_TOLERANCE_SECONDS <= 900:
+        raise RuntimeError(
+            "PAIRGATE_WEBHOOK_TOLERANCE_SECONDS must be between 30 and 900."
+        )
+
+    if (
+        APP_ENV == "production"
+        and PAIRGATE_API_KEY
+        and not PAIRGATE_WEBHOOK_SECRET
+    ):
+        raise RuntimeError(
+            "PAIRGATE_WEBHOOK_SECRET is required when Pairgate is enabled."
+        )
 
     DATABASE_PATH = os.getenv(
         "DATABASE_PATH",
