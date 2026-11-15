@@ -22,10 +22,14 @@ def get_database_path():
 def get_connection():
 
     connection = sqlite3.connect(
-        get_database_path()
+        get_database_path(),
+        timeout=30
     )
 
     connection.row_factory = sqlite3.Row
+
+    # Wait briefly for concurrent transactions instead of failing immediately.
+    connection.execute("PRAGMA busy_timeout = 30000")
 
     # Helps SQLite enforce relationships.
     connection.execute(
