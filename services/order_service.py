@@ -367,153 +367,154 @@ class OrderService:
         message=None,
         supplier_reference=None
     ):
+        status = str(status or "").strip().lower()
+        if status not in {"successful", "failed"}:
+            raise ValueError("Unsupported Pairgate webhook status.")
 
-        status = str(
-            status or ""
-        ).strip().lower()
+        connection = get_connection()
+        try:
+            cursor = connection.cursor()
+            cursor.execute("BEGIN IMMEDIATE")
 
-        if status not in {
-            "successful",
-            "failed"
-        }:
+            cursor.execute("""
+                SELECT
+                    o.*,
+                    d.name AS plan_name
+                FROM orders o
+                LEFT JOIN data_plans d ON o.plan_id = d.id
+                WHERE o.reference = ?
+            """, (reference,))
+            row = cursor.fetchone()
 
-            raise ValueError(
-                "Unsupported Pairgate webhook status."
-            )
+            if not row:
+                raise ValueError("Order not found.")
 
-        order = self.get_order_by_reference(
-            reference
-        )
+            order = dict(row)
+            current_status = str(order["status"]).upper()
 
-        if not order:
-
-            raise ValueError(
-                "Order not found."
-            )
-
-        current_status = str(
-            order["status"]
-        ).upper()
-
-        if current_status not in {"PROCESSING", "SUCCESS", "REFUNDED"}:
-            return {
-                "status": "ignored",
-                "reference": reference,
-                "order_status": current_status,
-                "message": "Order is not in a state that accepts supplier callbacks."
-            }
-
-        # ------------------------------------------------------
-        # SUCCESSFUL ORDER
-        # ------------------------------------------------------
-
-        if status == "successful":
-
-            # If this webhook was already processed,
-            # do nothing. This makes the endpoint idempotent.
             if current_status == "SUCCESS":
-
+                connection.commit()
                 return {
-                    "status": "already_processed",
+                    "status": "already_processed" if status == "successful" else "ignored",
                     "reference": reference,
                     "order_status": "SUCCESS"
                 }
 
-            # A refunded order must not automatically be
-            # changed back to SUCCESS.
             if current_status == "REFUNDED":
+                connection.commit()
+                return {
+                    "status": "already_processed" if status == "failed" else "ignored",
+                    "reference": reference,
+                    "order_status": "REFUNDED",
+                    "message": "Order was already refunded."
+                }
 
+            if current_status != "PROCESSING":
+                connection.commit()
                 return {
                     "status": "ignored",
                     "reference": reference,
                     "order_status": current_status,
-                    "message": (
-                        "Order was already refunded."
-                    )
+                    "message": "Order is not in a state that accepts supplier callbacks."
                 }
 
-            self._update_order(
-                reference=reference,
-                status="SUCCESS",
-                message=(
-                    message
-                    or
-                    "Data purchase completed."
-                ),
-                supplier_reference=
-                    supplier_reference
-            )
+            if status == "successful":
+                cursor.execute("""
+                    UPDATE orders
+                    SET status = 'SUCCESS',
+                        message = ?,
+                        supplier_reference = ?,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE reference = ? AND status = 'PROCESSING'
+                """, (
+                    message or "Data purchase completed.",
+                    supplier_reference,
+                    reference
+                ))
 
-            return {
-                "status": "success",
-                "reference": reference,
-                "order_status": "SUCCESS"
-            }
+                if cursor.rowcount != 1:
+                    raise ValueError("Order status changed before callback processing.")
 
-        # ------------------------------------------------------
-        # FAILED ORDER
-        # ------------------------------------------------------
-
-        if status == "failed":
-
-            # Duplicate failed webhook.
-            if current_status == "REFUNDED":
-
+                connection.commit()
                 return {
-                    "status": "already_processed",
+                    "status": "success",
                     "reference": reference,
-                    "order_status": "REFUNDED"
+                    "order_status": "SUCCESS"
                 }
 
-            # Never refund an order that we already marked
-            # successful.
-            if current_status == "SUCCESS":
+            user_id = order["user_id"]
+            amount_kobo = int(order["amount_kobo"])
+            if not user_id or amount_kobo <= 0:
+                raise ValueError("Order cannot be refunded because its user or amount is invalid.")
 
-                return {
-                    "status": "ignored",
-                    "reference": reference,
-                    "order_status": "SUCCESS",
-                    "message": (
-                        "A failed webhook was received "
-                        "after the order was marked successful."
+            refund_reference = f"REFUND-{reference}"
+            cursor.execute("""
+                SELECT id
+                FROM wallet_transactions
+                WHERE reference = ?
+            """, (refund_reference,))
+            existing_refund = cursor.fetchone()
+
+            if not existing_refund:
+                cursor.execute("""
+                    UPDATE wallets
+                    SET balance_kobo = balance_kobo + ?,
+                        updated_at = CURRENT_TIMESTAMP
+                    WHERE user_id = ?
+                """, (amount_kobo, user_id))
+
+                if cursor.rowcount != 1:
+                    raise ValueError("Wallet not found for refund.")
+
+                cursor.execute("""
+                    INSERT INTO wallet_transactions (
+                        user_id, type, amount_kobo, reference,
+                        description, status
                     )
-                }
+                    VALUES (?, 'CREDIT', ?, ?, ?, 'SUCCESS')
+                """, (
+                    user_id,
+                    amount_kobo,
+                    refund_reference,
+                    (
+                        f"Refund for {order.get('plan_name') or 'data purchase'}. "
+                        f"Reason: {message or 'Pairgate marked the transaction as failed.'}"
+                    )
+                ))
 
-            refund_result = self._refund_customer(
-                user_id=order["user_id"],
-                amount_kobo=order["amount_kobo"],
-                order_reference=reference,
-                plan_name=(
-                    order.get("plan_name")
-                    or
-                    "data purchase"
-                ),
-                reason=(
-                    message
-                    or
-                    "Pairgate marked the transaction as failed."
-                )
-            )
+            cursor.execute("""
+                UPDATE orders
+                SET status = 'REFUNDED',
+                    message = ?,
+                    supplier_reference = ?,
+                    updated_at = CURRENT_TIMESTAMP
+                WHERE reference = ? AND status = 'PROCESSING'
+            """, (
+                message or "Pairgate marked the transaction as failed. Wallet refunded.",
+                supplier_reference,
+                reference
+            ))
 
-            self._update_order(
-                reference=reference,
-                status="REFUNDED",
-                message=(
-                    message
-                    or
-                    "Pairgate marked the transaction as failed. "
-                    "Wallet refunded."
-                ),
-                supplier_reference=
-                    supplier_reference
-            )
+            if cursor.rowcount != 1:
+                raise ValueError("Order status changed before refund completion.")
 
+            connection.commit()
             return {
                 "status": "refunded",
                 "reference": reference,
                 "order_status": "REFUNDED",
-                "refund": refund_result
+                "refund": {
+                    "status": "already_refunded" if existing_refund else "refunded",
+                    "reference": refund_reference,
+                    "amount_kobo": amount_kobo
+                }
             }
+
+        except Exception:
+            connection.rollback()
+            raise
+        finally:
+            connection.close()
 
     # ==========================================================
     # REFUND
