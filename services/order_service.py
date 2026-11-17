@@ -24,6 +24,7 @@ class OrderService:
     ):
 
         phone = str(phone).strip()
+        existing_order_reference = None
 
         if idempotency_key is not None:
             idempotency_key = str(idempotency_key).strip()
@@ -50,18 +51,22 @@ class OrderService:
                         )
 
                     status = str(existing["status"]).upper()
-                    status_map = {
-                        "SUCCESS": "success",
-                        "PENDING": "processing",
-                        "PROCESSING": "processing",
-                        "REFUNDED": "refunded",
-                        "FAILED": "failed"
-                    }
-                    return {
-                        "status": status_map.get(status, "processing"),
-                        "reference": existing["reference"],
-                        "message": existing["message"] or "This order was already submitted."
-                    }
+                    if status != "PENDING":
+                        status_map = {
+                            "SUCCESS": "success",
+                            "PROCESSING": "processing",
+                            "REFUNDED": "refunded",
+                            "FAILED": "failed"
+                        }
+                        return {
+                            "status": status_map.get(status, "processing"),
+                            "reference": existing["reference"],
+                            "message": existing["message"] or "This order was already submitted."
+                        }
+
+                    # A PENDING order has not yet been submitted to the supplier.
+                    # Reuse its reference so wallet debit remains idempotent.
+                    existing_order_reference = existing["reference"]
             finally:
                 connection.close()
 
@@ -92,7 +97,7 @@ class OrderService:
                 "This data plan has an invalid price."
             )
 
-        reference = generate_reference(
+        reference = existing_order_reference or generate_reference(
             "ORD"
         )
 
@@ -102,7 +107,7 @@ class OrderService:
 
             cursor = connection.cursor()
 
-            if idempotency_key:
+            if idempotency_key and not existing_order_reference:
                 cursor.execute("""
                     INSERT OR IGNORE INTO orders (
                         reference, user_id, phone, network, plan_id,
@@ -147,7 +152,7 @@ class OrderService:
                         "reference": existing["reference"],
                         "message": existing["message"] or "This order was already submitted."
                     }
-            else:
+            elif not idempotency_key:
                 cursor.execute("""
                     INSERT INTO orders (
                         reference, user_id, phone, network, plan_id,
@@ -171,33 +176,72 @@ class OrderService:
 
             connection.close()
 
+        # The order row is persisted before wallet debit. If a process stops
+        # between those operations, an idempotent retry can safely resume it.
+        connection = get_connection()
         try:
+            existing_debit = connection.execute(
+                "SELECT id FROM wallet_transactions WHERE reference = ?",
+                (reference,)
+            ).fetchone()
+        finally:
+            connection.close()
 
-            WalletService.debit_wallet(
-                user_id=user_id,
-                amount_kobo=amount_kobo,
-                reference=reference,
-                description=(
-                    f"Data purchase - "
-                    f"{plan['name']}"
+        if not existing_debit:
+            try:
+                WalletService.debit_wallet(
+                    user_id=user_id,
+                    amount_kobo=amount_kobo,
+                    reference=reference,
+                    description=f"Data purchase - {plan['name']}"
                 )
-            )
+            except Exception as error:
+                # A concurrent retry may have completed the same debit.
+                connection = get_connection()
+                try:
+                    existing_debit = connection.execute(
+                        "SELECT id FROM wallet_transactions WHERE reference = ?",
+                        (reference,)
+                    ).fetchone()
+                finally:
+                    connection.close()
 
-        except Exception as error:
+                if not existing_debit:
+                    self._update_order(
+                        reference,
+                        "FAILED",
+                        str(error),
+                        expected_status="PENDING"
+                    )
+                    raise
 
-            self._update_order(
-                reference,
-                "FAILED",
-                str(error)
-            )
-
-            raise
-
-        self._update_order(
+        # Claim the order before calling the supplier. Only one retry may
+        # move PENDING -> PROCESSING and submit the purchase request.
+        claimed = self._update_order(
             reference,
             "PROCESSING",
-            "Sending data order to supplier."
+            "Sending data order to supplier.",
+            expected_status="PENDING"
         )
+        if not claimed:
+            current = self.get_order_by_reference(reference)
+            current_status = str(current["status"]).upper() if current else "PROCESSING"
+            status_map = {
+                "SUCCESS": "success",
+                "PROCESSING": "processing",
+                "REFUNDED": "refunded",
+                "FAILED": "failed",
+                "PENDING": "processing"
+            }
+            return {
+                "status": status_map.get(current_status, "processing"),
+                "reference": reference,
+                "message": (
+                    current.get("message")
+                    if current
+                    else "This order is already being processed."
+                ) or "This order is already being processed."
+            }
 
         try:
 
@@ -276,40 +320,28 @@ class OrderService:
                 "true"
             }:
 
-                self._update_order(
-                    reference=reference,
-                    status="SUCCESS",
-                    message=(
-                        supplier_response.get(
-                            "message"
-                        )
-                        or
-                        supplier_data.get(
-                            "message"
-                        )
-                        or
-                        "Data purchase successful."
-                    ),
-                    supplier_reference=
-                        supplier_reference
+                success_message = (
+                    supplier_response.get("message")
+                    or supplier_data.get("message")
+                    or "Data purchase successful."
                 )
-
+                transition = self.process_pairgate_webhook(
+                    reference=reference,
+                    status="successful",
+                    message=success_message,
+                    supplier_reference=supplier_reference
+                )
+                if transition.get("order_status") == "SUCCESS":
+                    return {
+                        "status": "success",
+                        "reference": reference,
+                        "supplier_reference": supplier_reference,
+                        "message": success_message
+                    }
                 return {
-                    "status": "success",
+                    "status": "processing",
                     "reference": reference,
-                    "supplier_reference":
-                        supplier_reference,
-                    "message": (
-                        supplier_response.get(
-                            "message"
-                        )
-                        or
-                        supplier_data.get(
-                            "message"
-                        )
-                        or
-                        "Data purchase successful."
-                    )
+                    "message": "The order status changed while the supplier response was being processed. It is being reconciled."
                 }
 
             if supplier_status in {
@@ -317,40 +349,38 @@ class OrderService:
                 "processing"
             }:
 
+                pending_message = (
+                    supplier_response.get("message")
+                    or supplier_data.get("message")
+                    or "Supplier is processing the order."
+                )
                 self._update_order(
                     reference=reference,
                     status="PROCESSING",
-                    message=(
-                        supplier_response.get(
-                            "message"
-                        )
-                        or
-                        supplier_data.get(
-                            "message"
-                        )
-                        or
-                        "Supplier is processing the order."
-                    ),
-                    supplier_reference=
-                        supplier_reference
+                    message=pending_message,
+                    supplier_reference=supplier_reference,
+                    expected_status="PROCESSING"
                 )
-
+                current = self.get_order_by_reference(reference)
+                current_status = str(current["status"]).upper() if current else "PROCESSING"
+                if current_status == "SUCCESS":
+                    return {
+                        "status": "success",
+                        "reference": reference,
+                        "supplier_reference": supplier_reference,
+                        "message": "Data purchase successful."
+                    }
+                if current_status == "REFUNDED":
+                    return {
+                        "status": "refunded",
+                        "reference": reference,
+                        "message": "The supplier rejected the order. Your wallet has been refunded."
+                    }
                 return {
                     "status": "processing",
                     "reference": reference,
-                    "supplier_reference":
-                        supplier_reference,
-                    "message": (
-                        supplier_response.get(
-                            "message"
-                        )
-                        or
-                        supplier_data.get(
-                            "message"
-                        )
-                        or
-                        "Order is being processed."
-                    )
+                    "supplier_reference": supplier_reference,
+                    "message": pending_message
                 }
 
             reason = (
@@ -408,7 +438,8 @@ class OrderService:
                     "Supplier response could not "
                     "be confirmed. Order requires "
                     "status verification."
-                )
+                ),
+                expected_status="PROCESSING"
             )
 
             self._save_supplier_log(
@@ -685,16 +716,15 @@ class OrderService:
         reference,
         status,
         message=None,
-        supplier_reference=None
+        supplier_reference=None,
+        expected_status=None
     ):
 
         connection = get_connection()
 
         try:
-
             cursor = connection.cursor()
-
-            cursor.execute("""
+            query = """
                 UPDATE orders
                 SET
                     status = ?,
@@ -702,17 +732,18 @@ class OrderService:
                     supplier_reference = ?,
                     updated_at = CURRENT_TIMESTAMP
                 WHERE reference = ?
-            """, (
-                status,
-                message,
-                supplier_reference,
-                reference
-            ))
+            """
+            parameters = [status, message, supplier_reference, reference]
+            if expected_status is not None:
+                query += " AND status = ?"
+                parameters.append(expected_status)
 
+            cursor.execute(query, parameters)
+            updated = cursor.rowcount == 1
             connection.commit()
+            return updated
 
         finally:
-
             connection.close()
 
     def _save_supplier_log(
