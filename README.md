@@ -35,7 +35,7 @@ Important environment variables:
 | Variable | Purpose |
 | --- | --- |
 | `APP_ENV` | Use `development` locally and `production` for deployment. |
-| `SECRET_KEY` | Required in production; used to sign Flask sessions. |
+| `SECRET_KEY` | Required in production; use a randomly generated value of at least 32 characters to sign Flask sessions. |
 | `DATABASE_PATH` | SQLite database file path. Must point to persistent storage in a deployment. |
 | `PAIRGATE_API_KEY` | Pairgate API credential. |
 | `PAIRGATE_BASE_URL` | Pairgate API base URL. |
@@ -61,6 +61,8 @@ Never commit real credentials. Configure production secrets in the hosting provi
 - Pairgate order status transitions and refunds are processed atomically. Duplicate failed callbacks cannot create a second refund.
 - Data-purchase requests accept an `Idempotency-Key` header. The browser client sends a key and reuses it when retrying the same submission.
 - The former generic `/api/v1/webhooks/payment` endpoint is disabled because it accepted unverified payment statuses. It returns HTTP 410. Use the verified Paystack endpoint instead.
+- Session-authenticated state-changing routes require a CSRF token; administrative plan synchronization is protected as well.
+- Supplier plan prices are converted to kobo with `Decimal`, not binary floating-point arithmetic.
 
 ## Database and deployment limitations
 
@@ -79,7 +81,7 @@ python -m compileall -q .
 pytest -q
 ```
 
-The tests cover unsigned webhook rejection, Pairgate signature freshness, Paystack wallet-credit idempotency and amount validation, Pairgate refund idempotency, and order-request idempotency.
+The 16 regression tests cover production-secret validation, unsigned webhook rejection, Pairgate signature freshness, signed Paystack webhook validation and wallet-credit idempotency, amount/currency checks, Pairgate refund idempotency, order retry recovery, supplier callback races, administrative CSRF protection, and exact supplier-price conversion.
 
 ## Current status
 
