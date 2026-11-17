@@ -23,12 +23,47 @@ class Settings:
     APP_ENV = os.getenv(
         "APP_ENV",
         "development"
+    ).strip().lower()
+
+    SECRET_KEY = os.getenv("SECRET_KEY", "").strip()
+    if APP_ENV == "production":
+        if (
+            len(SECRET_KEY) < 32
+            or SECRET_KEY.lower() in {
+                "change-this-secret-key",
+                "development-only-insecure-secret",
+                "development-secret-change-me"
+            }
+        ):
+            raise RuntimeError(
+                "SECRET_KEY must be a non-placeholder value of at least 32 characters in production."
+            )
+    elif not SECRET_KEY:
+        SECRET_KEY = "development-only-insecure-secret"
+
+    PAIRGATE_WEBHOOK_SECRET = os.getenv(
+        "PAIRGATE_WEBHOOK_SECRET"
     )
 
-    SECRET_KEY = os.getenv(
-        "SECRET_KEY",
-        "development-secret-change-me"
+    PAIRGATE_WEBHOOK_VERIFY = (
+        os.getenv("PAIRGATE_WEBHOOK_VERIFY", "true").strip().lower()
+        == "true"
     )
+
+    try:
+        PAIRGATE_WEBHOOK_TOLERANCE_SECONDS = int(
+            os.getenv("PAIRGATE_WEBHOOK_TOLERANCE_SECONDS", "300")
+        )
+    except ValueError as error:
+        raise RuntimeError(
+            "PAIRGATE_WEBHOOK_TOLERANCE_SECONDS must be an integer."
+        ) from error
+
+    if not 30 <= PAIRGATE_WEBHOOK_TOLERANCE_SECONDS <= 900:
+        raise RuntimeError(
+            "PAIRGATE_WEBHOOK_TOLERANCE_SECONDS must be between 30 and 900."
+        )
+
 
     DATABASE_PATH = os.getenv(
         "DATABASE_PATH",
@@ -47,10 +82,19 @@ class Settings:
     PAIRGATE_TEST_MODE = (
         os.getenv(
             "PAIRGATE_TEST_MODE",
-            "true"
-        ).lower()
+            "false" if APP_ENV == "production" else "true"
+        ).strip().lower()
         == "true"
     )
+
+    if (
+        APP_ENV == "production"
+        and PAIRGATE_API_KEY
+        and not PAIRGATE_WEBHOOK_SECRET
+    ):
+        raise RuntimeError(
+            "PAIRGATE_WEBHOOK_SECRET is required when Pairgate is enabled."
+        )
 
     PAYSTACK_SECRET_KEY = os.getenv(
         "PAYSTACK_SECRET_KEY"
@@ -64,9 +108,19 @@ class Settings:
     PAYSTACK_TEST_MODE = (
         os.getenv(
             "PAYSTACK_TEST_MODE",
-            "true"
-        ).lower() == "true"
+            "false" if APP_ENV == "production" else "true"
+        ).strip().lower() == "true"
     )
+    if APP_ENV == "production" and PAIRGATE_TEST_MODE:
+        raise RuntimeError(
+            "PAIRGATE_TEST_MODE must be false in production."
+        )
+
+    if APP_ENV == "production" and PAYSTACK_TEST_MODE:
+        raise RuntimeError(
+            "PAYSTACK_TEST_MODE must be false in production."
+        )
+
     PORT = int(
         os.getenv(
             "PORT",

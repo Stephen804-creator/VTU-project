@@ -1,4 +1,5 @@
 let selectedPlan = null;
+let pendingOrderIdempotencyKey = null;
 
 
 document
@@ -388,6 +389,14 @@ async function confirmPurchase() {
     button.textContent =
         "Processing...";
 
+    if (!pendingOrderIdempotencyKey) {
+        pendingOrderIdempotencyKey = (
+            typeof crypto !== "undefined" &&
+            typeof crypto.randomUUID === "function"
+        )
+            ? crypto.randomUUID()
+            : `order-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    }
 
     try {
 
@@ -396,6 +405,9 @@ async function confirmPurchase() {
                 "/orders",
                 {
                     method: "POST",
+                    headers: {
+                        "Idempotency-Key": pendingOrderIdempotencyKey
+                    },
                     body: JSON.stringify({
                         plan_id:
                             selectedPlan.id,
@@ -424,6 +436,7 @@ async function confirmPurchase() {
 
 
         selectedPlan = null;
+        pendingOrderIdempotencyKey = null;
 
 
         hideElement(

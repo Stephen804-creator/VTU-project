@@ -118,6 +118,23 @@ def initialize_database():
         )
     """)
 
+    # Add idempotency support to existing installations.
+    cursor.execute("PRAGMA table_info(orders)")
+    order_columns = {
+        row["name"] for row in cursor.fetchall()
+    }
+    if "idempotency_key" not in order_columns:
+        cursor.execute(
+            "ALTER TABLE orders ADD COLUMN idempotency_key TEXT"
+        )
+
+    cursor.execute("""
+        CREATE UNIQUE INDEX IF NOT EXISTS
+        idx_orders_user_idempotency_key
+        ON orders(user_id, idempotency_key)
+        WHERE idempotency_key IS NOT NULL
+    """)
+
     # =========================
     # WALLET TRANSACTIONS
     # =========================

@@ -68,7 +68,8 @@ def create_order():
         result = order_service.create_order(
             user_id=user_id,
             plan_id=plan_id,
-            phone=phone
+            phone=phone,
+            idempotency_key=request.headers.get("Idempotency-Key")
         )
 
         if result["status"] == "success":

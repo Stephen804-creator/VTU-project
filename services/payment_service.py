@@ -7,9 +7,17 @@ from utils.references import generate_reference
 
 class PaymentService:
 
-    provider_service = (
-        PaymentProviderService()
-    )
+    provider_service = None
+
+    @staticmethod
+    def get_provider(provider_name="paystack"):
+        # Defer provider construction until a payment operation is requested.
+        # This lets the application and non-payment routes start without
+        # payment credentials configured.
+        if PaymentService.provider_service is None:
+            PaymentService.provider_service = PaymentProviderService()
+
+        return PaymentService.provider_service.get_provider(provider_name)
 
     @staticmethod
     def create_payment(
@@ -128,23 +136,27 @@ class PaymentService:
             )
         )
 
-        provider = (
-            PaymentService
-            .provider_service
-            .get_provider("paystack")
-        )
+        try:
+            provider = (
+                PaymentService.get_provider("paystack")
+            )
 
-        result = provider.initialize_transaction(
-            email=email,
-            amount_kobo=amount_kobo,
-            reference=payment["reference"],
-            callback_url=callback_url,
-            metadata={
-                "user_id": user_id,
-                "payment_reference":
-                    payment["reference"]
-            }
-        )
+            result = provider.initialize_transaction(
+                email=email,
+                amount_kobo=amount_kobo,
+                reference=payment["reference"],
+                callback_url=callback_url,
+                metadata={
+                    "user_id": user_id,
+                    "payment_reference": payment["reference"]
+                }
+            )
+        except Exception:
+            PaymentService.mark_failed_payment(
+                payment["reference"],
+                message="Provider initialization failed."
+            )
+            raise
 
         data = result.get(
             "data",
@@ -175,36 +187,30 @@ class PaymentService:
         reference
     ):
 
-        payment = (
-            PaymentService.get_payment(
-                reference
-            )
-        )
+        payment = PaymentService.get_payment(reference)
 
         if not payment:
+            raise ValueError("Payment record not found.")
 
-            raise ValueError(
-                "Payment record not found."
-            )
+        if payment["provider"] != "paystack":
+            raise ValueError("Payment provider does not match Paystack.")
 
-        provider = (
-            PaymentService
-            .provider_service
-            .get_provider("paystack")
-        )
+        provider = PaymentService.get_provider("paystack")
+        result = provider.verify_transaction(reference)
+        provider_data = result.get("data") if isinstance(result, dict) else None
 
-        result = (
-            provider.verify_transaction(
-                reference
-            )
-        )
+        if not result.get("status") or not isinstance(provider_data, dict):
+            raise ValueError("Paystack could not verify this payment.")
+
+        if str(provider_data.get("reference", "")) != str(reference):
+            raise ValueError("Paystack payment reference does not match.")
+
+        if str(provider_data.get("currency", "")).upper() != "NGN":
+            raise ValueError("Paystack payment currency is not NGN.")
 
         return {
-            "payment":
-                payment,
-
-            "provider_response":
-                result
+            "payment": payment,
+            "provider_response": result
         }
 
     @staticmethod
@@ -251,22 +257,42 @@ class PaymentService:
                 }
 
             if payment["status"] == "FAILED":
-
                 raise ValueError(
                     "This payment has already failed."
                 )
 
-            if (
-                provider_amount_kobo
-                is not None
-                and
-                int(provider_amount_kobo)
-                != int(payment["amount_kobo"])
-            ):
+            if payment["provider"] != "paystack":
+                raise ValueError("Payment provider does not match Paystack.")
+
+            if provider_reference in (None, ""):
+                raise ValueError("Paystack transaction ID is required.")
+
+            if provider_amount_kobo is None:
+                raise ValueError("Verified Paystack amount is required.")
+
+            try:
+                verified_amount = int(provider_amount_kobo)
+            except (TypeError, ValueError):
+                raise ValueError("Invalid verified Paystack amount.")
+
+            if verified_amount != int(payment["amount_kobo"]):
 
                 raise ValueError(
                     "Payment amount does not match "
                     "the expected wallet funding amount."
+                )
+
+            cursor.execute("""
+                SELECT reference
+                FROM payments
+                WHERE provider = 'paystack'
+                  AND provider_reference = ?
+                  AND reference != ?
+            """, (str(provider_reference), reference))
+
+            if cursor.fetchone():
+                raise ValueError(
+                    "Paystack transaction ID has already been used."
                 )
 
             cursor.execute("""
