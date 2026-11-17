@@ -367,6 +367,13 @@ def test_pending_idempotent_order_retry_reuses_existing_wallet_debit(database):
 
 def test_supplier_pending_response_cannot_overwrite_concurrent_success(database):
     user_id, plan_id = database
+    connection = get_connection()
+    connection.execute(
+        "UPDATE wallets SET balance_kobo = 1000 WHERE user_id = ?",
+        (user_id,)
+    )
+    connection.commit()
+    connection.close()
     service = OrderService()
 
     class SupplierWithConcurrentWebhook:
