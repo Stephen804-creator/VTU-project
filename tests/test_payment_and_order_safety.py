@@ -293,3 +293,107 @@ def test_order_idempotency_key_cannot_be_reused_for_different_payload(database):
             phone="08099999999",
             idempotency_key="same-order-key-654321"
         )
+
+
+def test_pending_idempotent_order_retry_reuses_existing_wallet_debit(database):
+    user_id, plan_id = database
+    reference = "ORD-PENDING-RECOVERY"
+    key = "retry-existing-pending-order-123"
+
+    connection = get_connection()
+    connection.execute(
+        "UPDATE wallets SET balance_kobo = 300 WHERE user_id = ?",
+        (user_id,)
+    )
+    connection.execute("""
+        INSERT INTO orders (
+            reference, user_id, phone, network, plan_id, supplier,
+            supplier_plan_id, amount_kobo, status, message, idempotency_key
+        )
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'PENDING', ?, ?)
+    """, (
+        reference, user_id, "08012345678", "mtn", plan_id,
+        "pairgate", "plan-1", 700, "Order created.", key
+    ))
+    connection.execute("""
+        INSERT INTO wallet_transactions (
+            user_id, type, amount_kobo, reference, description, status
+        )
+        VALUES (?, 'DEBIT', ?, ?, ?, 'SUCCESS')
+    """, (
+        user_id, 700, reference, "Data purchase - Test Plan"
+    ))
+    connection.commit()
+    connection.close()
+
+    service = OrderService()
+    calls = []
+
+    class SuccessfulSupplier:
+        def purchase_data(self, **kwargs):
+            calls.append(kwargs)
+            return {"status": "success", "message": "Delivered"}
+
+    service.supplier_service.get_supplier = lambda _name: SuccessfulSupplier()
+
+    result = service.create_order(
+        user_id=user_id,
+        plan_id=plan_id,
+        phone="08012345678",
+        idempotency_key=key
+    )
+
+    connection = get_connection()
+    wallet = connection.execute(
+        "SELECT balance_kobo FROM wallets WHERE user_id = ?",
+        (user_id,)
+    ).fetchone()
+    debit_count = connection.execute(
+        "SELECT COUNT(*) FROM wallet_transactions WHERE reference = ?",
+        (reference,)
+    ).fetchone()[0]
+    order = connection.execute(
+        "SELECT status FROM orders WHERE reference = ?",
+        (reference,)
+    ).fetchone()
+    connection.close()
+
+    assert result["status"] == "success"
+    assert len(calls) == 1
+    assert wallet["balance_kobo"] == 300
+    assert debit_count == 1
+    assert order["status"] == "SUCCESS"
+
+
+def test_supplier_pending_response_cannot_overwrite_concurrent_success(database):
+    user_id, plan_id = database
+    service = OrderService()
+
+    class SupplierWithConcurrentWebhook:
+        def purchase_data(self, **kwargs):
+            service.process_pairgate_webhook(
+                reference=kwargs["reference"],
+                status="successful",
+                message="Webhook confirmed delivery",
+                supplier_reference="PAIRGATE-TXN-1"
+            )
+            return {"status": "pending", "message": "Still processing"}
+
+    service.supplier_service.get_supplier = lambda _name: SupplierWithConcurrentWebhook()
+
+    result = service.create_order(
+        user_id=user_id,
+        plan_id=plan_id,
+        phone="08012345678",
+        idempotency_key="concurrent-success-test-123"
+    )
+
+    connection = get_connection()
+    order = connection.execute(
+        "SELECT status FROM orders WHERE reference = ?",
+        (result["reference"],)
+    ).fetchone()
+    connection.close()
+
+    assert result["status"] == "success"
+    assert order["status"] == "SUCCESS"
