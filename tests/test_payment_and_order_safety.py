@@ -1,5 +1,6 @@
 import hashlib
 import hmac
+import json
 import time
 
 import pytest
@@ -458,3 +459,122 @@ def test_plan_sync_converts_naira_to_kobo_without_float_math():
     assert plans[0]["supplier_price_kobo"] == 115
     assert plans[0]["selling_price_kobo"] == 115
     assert saved == plans
+
+
+def test_paystack_webhook_verifies_signature_and_credits_wallet_once(database, monkeypatch):
+    user_id, _ = database
+    secret = "test-paystack-webhook-secret"
+    monkeypatch.setattr(settings, "PAYSTACK_SECRET_KEY", secret)
+
+    connection = get_connection()
+    connection.execute("""
+        INSERT INTO payments (
+            user_id, reference, provider, amount_kobo, status, payment_method
+        )
+        VALUES (?, ?, 'paystack', ?, 'PENDING', 'online')
+    """, (user_id, "PAY-WEBHOOK-001", 25000))
+    connection.commit()
+    connection.close()
+
+    payload = {
+        "event": "charge.success",
+        "data": {
+            "reference": "PAY-WEBHOOK-001",
+            "status": "success",
+            "currency": "NGN",
+            "amount": 25000,
+            "id": 987654321
+        }
+    }
+    raw_payload = json.dumps(payload, separators=(",", ":")).encode()
+    signature = hmac.new(
+        secret.encode(),
+        raw_payload,
+        hashlib.sha512
+    ).hexdigest()
+
+    app = Flask(__name__)
+    app.register_blueprint(webhooks_bp)
+    response = app.test_client().post(
+        "/api/v1/webhooks/paystack",
+        data=raw_payload,
+        content_type="application/json",
+        headers={"x-paystack-signature": signature}
+    )
+
+    connection = get_connection()
+    wallet = connection.execute(
+        "SELECT balance_kobo FROM wallets WHERE user_id = ?",
+        (user_id,)
+    ).fetchone()
+    payment = connection.execute(
+        "SELECT status FROM payments WHERE reference = ?",
+        ("PAY-WEBHOOK-001",)
+    ).fetchone()
+    ledger_count = connection.execute(
+        "SELECT COUNT(*) FROM wallet_transactions WHERE reference = ?",
+        ("FUND-PAY-WEBHOOK-001",)
+    ).fetchone()[0]
+    connection.close()
+
+    assert response.status_code == 200
+    assert wallet["balance_kobo"] == 25000
+    assert payment["status"] == "SUCCESS"
+    assert ledger_count == 1
+
+
+def test_paystack_webhook_rejects_wrong_currency_without_credit(database, monkeypatch):
+    user_id, _ = database
+    secret = "test-paystack-webhook-secret"
+    monkeypatch.setattr(settings, "PAYSTACK_SECRET_KEY", secret)
+
+    connection = get_connection()
+    connection.execute("""
+        INSERT INTO payments (
+            user_id, reference, provider, amount_kobo, status, payment_method
+        )
+        VALUES (?, ?, 'paystack', ?, 'PENDING', 'online')
+    """, (user_id, "PAY-WEBHOOK-002", 25000))
+    connection.commit()
+    connection.close()
+
+    payload = {
+        "event": "charge.success",
+        "data": {
+            "reference": "PAY-WEBHOOK-002",
+            "status": "success",
+            "currency": "USD",
+            "amount": 25000,
+            "id": 987654322
+        }
+    }
+    raw_payload = json.dumps(payload, separators=(",", ":")).encode()
+    signature = hmac.new(
+        secret.encode(),
+        raw_payload,
+        hashlib.sha512
+    ).hexdigest()
+
+    app = Flask(__name__)
+    app.register_blueprint(webhooks_bp)
+    response = app.test_client().post(
+        "/api/v1/webhooks/paystack",
+        data=raw_payload,
+        content_type="application/json",
+        headers={"x-paystack-signature": signature}
+    )
+
+    connection = get_connection()
+    wallet = connection.execute(
+        "SELECT balance_kobo FROM wallets WHERE user_id = ?",
+        (user_id,)
+    ).fetchone()
+    payment = connection.execute(
+        "SELECT status FROM payments WHERE reference = ?",
+        ("PAY-WEBHOOK-002",)
+    ).fetchone()
+    connection.close()
+
+    assert response.status_code == 400
+    assert wallet["balance_kobo"] == 0
+    assert payment["status"] == "PENDING"
