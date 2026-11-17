@@ -2,6 +2,7 @@ from flask import Blueprint, request
 
 from services.plan_service import PlanService
 from utils.auth import admin_required
+from utils.csrf import csrf_required
 from utils.responses import success_response, error_response
 from utils.validation import (
     normalize_network,
@@ -115,6 +116,7 @@ def plans():
     methods=["POST"]
 )
 @admin_required
+@csrf_required
 def sync_plans():
 
     plans = []
