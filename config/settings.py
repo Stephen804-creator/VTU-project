@@ -25,12 +25,20 @@ class Settings:
         "development"
     ).strip().lower()
 
-    SECRET_KEY = os.getenv("SECRET_KEY")
-    if not SECRET_KEY:
-        if APP_ENV == "production":
+    SECRET_KEY = os.getenv("SECRET_KEY", "").strip()
+    if APP_ENV == "production":
+        if (
+            len(SECRET_KEY) < 32
+            or SECRET_KEY.lower() in {
+                "change-this-secret-key",
+                "development-only-insecure-secret",
+                "development-secret-change-me"
+            }
+        ):
             raise RuntimeError(
-                "SECRET_KEY must be configured in production."
+                "SECRET_KEY must be a non-placeholder value of at least 32 characters in production."
             )
+    elif not SECRET_KEY:
         SECRET_KEY = "development-only-insecure-secret"
 
     PAIRGATE_WEBHOOK_SECRET = os.getenv(
