@@ -9,7 +9,9 @@ from config.settings import settings
 from database.database import get_connection
 from database.models import initialize_database
 from routes.webhooks import verify_pairgate_signature, webhooks_bp
+from routes.data import data_bp
 from services.order_service import OrderService
+from services.plan_service import PlanService
 from services.payment_service import PaymentService
 
 
@@ -404,3 +406,55 @@ def test_supplier_pending_response_cannot_overwrite_concurrent_success(database)
 
     assert result["status"] == "success"
     assert order["status"] == "SUCCESS"
+
+
+def test_admin_plan_sync_requires_csrf_token(database):
+    user_id, _ = database
+    connection = get_connection()
+    connection.execute(
+        "UPDATE users SET role = 'admin' WHERE id = ?",
+        (user_id,)
+    )
+    connection.commit()
+    connection.close()
+
+    app = Flask(__name__)
+    app.secret_key = "test-session-secret"
+    app.register_blueprint(data_bp)
+    client = app.test_client()
+
+    with client.session_transaction() as session:
+        session["user_id"] = user_id
+
+    response = client.post("/api/v1/data/sync")
+
+    assert response.status_code == 403
+
+
+def test_plan_sync_converts_naira_to_kobo_without_float_math():
+    service = PlanService()
+    saved = []
+
+    class Supplier:
+        def get_plans(self, _network, _plan_type):
+            return {
+                "data": {
+                    "MTN": [
+                        {
+                            "plan_id": "decimal-plan-1",
+                            "name": "Test Plan",
+                            "price": "1.15",
+                            "duration": 30
+                        }
+                    ]
+                }
+            }
+
+    service.supplier_service.get_supplier = lambda _name: Supplier()
+    service._save_plans = lambda plans: saved.extend(plans)
+
+    plans = service.sync_pairgate_plans("mtn", "SME")
+
+    assert plans[0]["supplier_price_kobo"] == 115
+    assert plans[0]["selling_price_kobo"] == 115
+    assert saved == plans
